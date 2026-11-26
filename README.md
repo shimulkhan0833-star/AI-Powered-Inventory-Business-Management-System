@@ -46,4 +46,17 @@ app/
 migrations/           # Alembic schema migrations
 ```
 
-Authentication and business features will be added in later steps.
+## Register a business
+
+Use `POST /auth/register` in `/docs` with `business_name`, `owner_name`,
+`email`, and `password` (8–128 characters). This creates the business and
+its Owner in one transaction. The response does not contain the password.
+Email addresses are unique across the system. Login and automatic sign-in
+will be implemented in a later step.
+
+To run the registration tests against an isolated in-memory database:
+
+```powershell
+python -m pip install -r requirements-dev.txt
+python -m unittest discover -s tests -v
+```
