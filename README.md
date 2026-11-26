@@ -51,8 +51,20 @@ migrations/           # Alembic schema migrations
 Use `POST /auth/register` in `/docs` with `business_name`, `owner_name`,
 `email`, and `password` (8–128 characters). This creates the business and
 its Owner in one transaction. The response does not contain the password.
-Email addresses are unique across the system. Login and automatic sign-in
-will be implemented in a later step.
+Email addresses are unique across the system. Registration does not
+automatically sign the owner in yet.
+
+## Log in and out
+
+Use `POST /auth/login` with email and password. Owners and salespeople use the
+same endpoint. It sets an HTTP-only session cookie; `GET /auth/me` returns the
+current user and business, and `POST /auth/logout` revokes the session.
+Sessions expire after eight hours and inactive users cannot use them.
+
+For local HTTP development `SESSION_COOKIE_SECURE=false` is the default. Set
+`SESSION_COOKIE_SECURE=true` in production and serve the app over HTTPS.
+Login rate limiting, password changes, and full role authorization are still
+to be implemented before production use.
 
 To run the registration tests against an isolated in-memory database:
 

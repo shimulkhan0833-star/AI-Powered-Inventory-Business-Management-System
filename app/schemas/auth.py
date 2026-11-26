@@ -27,3 +27,17 @@ class RegistrationResponse(BaseModel):
     owner_name: str
     email: str
     role: str
+
+
+class LoginRequest(BaseModel):
+    email: EmailStr
+    password: str = Field(min_length=1, max_length=128, repr=False)
+
+
+class CurrentUserResponse(BaseModel):
+    user_id: int
+    business_id: int
+    name: str
+    email: str
+    role: str
+    must_change_password: bool
