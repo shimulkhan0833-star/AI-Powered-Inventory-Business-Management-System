@@ -1,4 +1,4 @@
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, EmailStr, Field, StringConstraints, field_validator
 
@@ -32,6 +32,8 @@ class RegistrationResponse(BaseModel):
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=1, max_length=128, repr=False)
+    role: Literal["owner", "salesperson"]
+    business_name: Name
 
 
 class CurrentUserResponse(BaseModel):

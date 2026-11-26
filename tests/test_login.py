@@ -41,8 +41,8 @@ class LoginTests(unittest.TestCase):
         app.dependency_overrides.clear()
         self.engine.dispose()
 
-    def login(self, role="owner", password="password123"):
-        return self.client.post("/auth/login", json={"email": f"{role}@example.com", "password": password})
+    def login(self, role="owner", password="password123", email=None, business_name="Test shop"):
+        return self.client.post("/auth/login", json={"email": email or f"{role}@example.com", "password": password, "role": role, "business_name": business_name})
 
     def test_both_roles_can_login_and_access_their_identity(self):
         for role in ("owner", "salesperson"):
@@ -58,7 +58,10 @@ class LoginTests(unittest.TestCase):
     def test_missing_and_bad_credentials_are_rejected(self):
         self.assertEqual(self.client.get("/auth/me").status_code, 401)
         self.assertEqual(self.login(password="wrong").status_code, 401)
-        self.assertEqual(self.login(role="unknown").status_code, 401)
+        self.assertEqual(self.login(email="unknown@example.com").status_code, 401)
+        self.assertEqual(self.login(role="salesperson", email="owner@example.com").status_code, 401)
+        self.assertEqual(self.login(business_name="Another shop").status_code, 401)
+        self.assertEqual(self.login(business_name="  TEST SHOP  ").status_code, 200)
 
     def test_logout_revokes_session_even_if_token_is_reused(self):
         self.login()

@@ -56,7 +56,8 @@ automatically sign the owner in yet.
 
 ## Log in and out
 
-Use `POST /auth/login` with email and password. Owners and salespeople use the
+Use `POST /auth/login` with email, password, role (`owner` or `salesperson`),
+and business name. Owners and salespeople use the
 same endpoint. It sets an HTTP-only session cookie; `GET /auth/me` returns the
 current user and business, and `POST /auth/logout` revokes the session.
 Sessions expire after eight hours and inactive users cannot use them.
@@ -65,6 +66,14 @@ For local HTTP development `SESSION_COOKIE_SECURE=false` is the default. Set
 `SESSION_COOKIE_SECURE=true` in production and serve the app over HTTPS.
 Login rate limiting, password changes, and full role authorization are still
 to be implemented before production use.
+
+## Employees
+
+An authenticated owner can use `POST /employees` to create a salesperson using
+their name, email, and password, `GET /employees` to list salespeople in their
+business, and `PATCH /employees/{id}/deactivate` to disable access. Salespeople
+cannot use these endpoints. The owner must share credentials privately; there
+is currently no password-change or password-reset feature.
 
 To run the registration tests against an isolated in-memory database:
 

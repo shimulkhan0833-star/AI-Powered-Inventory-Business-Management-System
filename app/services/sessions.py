@@ -8,7 +8,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app.core.security import verify_password
-from app.models import LoginSession, User
+from app.models import Business, LoginSession, User
 
 SESSION_SECONDS = 8 * 60 * 60
 
@@ -22,9 +22,12 @@ def token_digest(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
-def authenticate(db: Session, email: str, password: str) -> User | None:
+def authenticate(db: Session, email: str, password: str, role: str, business_name: str) -> User | None:
     user = db.scalar(select(User).where(User.email == email.lower()))
     if user is None or not user.is_active or not verify_password(password, user.password_hash):
+        return None
+    business = db.get(Business, user.business_id)
+    if business is None or user.role != role or business.name.strip().casefold() != business_name.strip().casefold():
         return None
     return user
 

@@ -43,9 +43,9 @@ def user_response(user: User) -> CurrentUserResponse:
 
 @router.post("/login", response_model=CurrentUserResponse)
 def login(data: LoginRequest, request: Request, response: Response, db: Session = Depends(get_db)):
-    user = authenticate(db, str(data.email), data.password)
+    user = authenticate(db, str(data.email), data.password, data.role, data.business_name)
     if user is None:
-        raise HTTPException(status_code=401, detail="Invalid email or password")
+        raise HTTPException(status_code=401, detail="Invalid login details")
     token = create_session(db, user, request.cookies.get(SESSION_COOKIE))
     response.set_cookie(
         key=SESSION_COOKIE, value=token, max_age=SESSION_SECONDS,
