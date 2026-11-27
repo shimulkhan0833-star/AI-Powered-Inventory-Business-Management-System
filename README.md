@@ -75,7 +75,29 @@ business, and `PATCH /employees/{id}/deactivate` to disable access. Salespeople
 cannot use these endpoints. The owner must share credentials privately; there
 is currently no password-change or password-reset feature.
 
-To run the registration tests against an isolated in-memory database:
+## Products and stock
+
+The owner can use `POST /products` to add a product. Supply a name, selling
+price, optional purchase cost and SKU, and optional whole-number opening stock.
+When no SKU is provided, the server generates one. SKUs are unique per business.
+
+Both roles can list products with `GET /products`, view one with
+`GET /products/{id}`, read its current stock at `GET /products/{id}/stock`, and
+view stock history at `GET /products/{id}/history`. Salesperson responses do
+not include purchase costs or free-text adjustment reasons.
+
+Only owners can update product details with `PATCH /products/{id}` or adjust
+stock with `POST /products/{id}/adjustments`, providing a signed
+`quantity_change` and a `reason`. Stock may not go below zero. The product's
+balance and the corresponding movement are saved together. Every future
+stock-changing flow must lock the product and update both records in the same
+transaction. Quantities currently support whole units only.
+
+These endpoints require a login session. They do not yet include a visual
+interface, purchase and sales flows, or duplicate-request protection for
+stock adjustments. Avoid retrying an adjustment until its result is known.
+
+To run the tests against an isolated in-memory database:
 
 ```powershell
 python -m pip install -r requirements-dev.txt
