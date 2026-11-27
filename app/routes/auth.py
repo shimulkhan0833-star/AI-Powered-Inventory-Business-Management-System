@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.core.dependencies import SESSION_COOKIE, get_current_user
-from app.models import User
+from app.models import Business, User
 from app.schemas.auth import (
     BusinessRegistration, CurrentUserResponse, LoginRequest, RegistrationResponse,
 )
@@ -34,9 +34,9 @@ def register(data: BusinessRegistration, db: Session = Depends(get_db)):
     )
 
 
-def user_response(user: User) -> CurrentUserResponse:
+def user_response(user: User, db: Session) -> CurrentUserResponse:
     return CurrentUserResponse(
-        user_id=user.user_id, business_id=user.business_id, name=user.name,
+        user_id=user.user_id, business_id=user.business_id, business_name=db.get(Business, user.business_id).name, name=user.name,
         email=user.email, role=user.role, must_change_password=user.must_change_password,
     )
 
@@ -53,13 +53,13 @@ def login(data: LoginRequest, request: Request, response: Response, db: Session 
         samesite="strict", path="/",
     )
     response.headers["Cache-Control"] = "no-store"
-    return user_response(user)
+    return user_response(user, db)
 
 
 @router.get("/me", response_model=CurrentUserResponse)
-def current_user(response: Response, user: User = Depends(get_current_user)):
+def current_user(response: Response, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     response.headers["Cache-Control"] = "no-store"
-    return user_response(user)
+    return user_response(user, db)
 
 
 @router.post("/logout", status_code=204)

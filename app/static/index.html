@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#142e2c">
+  <title>Oleyn Stock · Your shop, in order</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="/static/app.js" defer></script>
+</head>
+<body>
+  <div id="notice" class="toast" role="status" aria-live="polite" hidden></div>
+  <main id="auth" class="auth-shell" hidden>
+    <section class="auth-story">
+      <a href="/" class="brand brand-light"><span class="brand-mark">o<span>.</span></span><span>oleyn <strong>stock</strong></span></a>
+      <div class="story-content"><span class="eyebrow light">MADE FOR THE WAY YOU TRADE</span><h1>A clearer picture<br>of your <em>business.</em></h1><p>Your stock, sales, and customer dues, all together in one simple workspace.</p>
+        <div class="story-card"><span class="story-card-icon">✳</span><div><strong>Know where your business stands.</strong><small>Spend less time on the ledger, and more time on your customers.</small></div></div>
+      </div><p class="story-footer">A little more clarity, every day.</p>
+    </section>
+    <section class="auth-panel"><div class="auth-inner">
+      <div class="mobile-brand"><span class="brand-mark">o<span>.</span></span> oleyn <strong>stock</strong></div>
+      <div class="auth-tabs" role="tablist"><button type="button" data-auth="login" class="active">Sign in</button><button type="button" data-auth="register">Register business</button></div>
+      <div id="login-panel"><span class="eyebrow">WELCOME BACK</span><h2>Sign in to your shop</h2><p class="muted">Pick up right where you left off.</p>
+        <form id="login-form" class="form-stack">
+          <label>Email address<input name="email" type="email" autocomplete="username" placeholder="you@example.com" required></label>
+          <label>Password<input name="password" type="password" autocomplete="current-password" placeholder="Enter your password" required></label>
+          <label>Role<select name="role" required><option value="owner">Owner</option><option value="salesperson">Salesperson</option></select></label>
+          <label>Business name<input name="business_name" autocomplete="organization" placeholder="Your registered business name" required></label>
+          <button class="btn primary wide" type="submit">Sign in</button>
+        </form><p class="auth-hint">New to Oleyn Stock? <button class="text-button" type="button" data-auth="register">Register your business</button></p>
+      </div>
+      <div id="register-panel" hidden><span class="eyebrow">LET’S GET STARTED</span><h2>Make room for better business.</h2><p class="muted">Create your business and owner account.</p>
+        <form id="register-form" class="form-stack">
+          <label>Business name<input name="business_name" maxlength="150" autocomplete="organization" required></label>
+          <label>Owner name<input name="owner_name" maxlength="150" autocomplete="name" required></label>
+          <label>Email address<input name="email" type="email" autocomplete="email" required></label>
+          <label>Password<input name="password" type="password" minlength="8" maxlength="128" autocomplete="new-password" required><small>At least 8 characters.</small></label>
+          <button class="btn primary wide" type="submit">Create business account</button>
+        </form><p class="auth-hint">Already registered? <button class="text-button" type="button" data-auth="login">Sign in</button></p>
+      </div>
+    </div></section>
+  </main>
+
+  <div id="workspace" class="workspace" hidden>
+    <aside class="sidebar"><a href="/" class="brand brand-light"><span class="brand-mark">o<span>.</span></span><span>oleyn <strong>stock</strong></span></a>
+      <div class="side-label">WORKSPACE</div><nav id="nav" aria-label="Main navigation">
+        <button data-page="dashboard"><span>▦</span> Overview</button><button data-page="products"><span>◇</span> Products & stock</button><button data-page="purchases" class="owner-only"><span>↓</span> Purchases</button><button data-page="sales"><span>▤</span> Sales</button><button data-page="customers"><span>◉</span> Customers & dues</button>
+      </nav><div class="side-label owner-only">MANAGE</div><nav aria-label="Management" class="owner-only"><button data-page="employees"><span>♙</span> Team</button></nav>
+      <div class="side-bottom"><div class="side-note"><b>Everything in its place.</b><small>A little clarity goes a long way.</small></div><button id="logout" class="side-logout">Sign out</button></div>
+    </aside>
+    <div class="main-area"><header class="topbar"><div class="top-brand">oleyn <b>stock</b></div><div class="top-context"><span class="context-dot"></span><span id="business-label">Your business</span><span class="divider"></span><span id="user-label"></span><span id="role-label" class="role-badge"></span><button id="logout-top" class="text-button mobile-logout" type="button">Sign out</button></div></header>
+      <main class="content"><div id="page-heading"></div><div id="page-content"></div></main>
+    </div>
+  </div>
+  <dialog id="modal"><div class="modal-head"><div><span id="modal-eyebrow" class="eyebrow">OLEYN STOCK</span><h2 id="modal-title"></h2></div><button class="icon-button" id="modal-close" type="button" aria-label="Close">×</button></div><div id="modal-body"></div></dialog>
+</body>
+</html>

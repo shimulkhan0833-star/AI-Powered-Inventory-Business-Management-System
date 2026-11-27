@@ -39,6 +39,7 @@ class LoginRequest(BaseModel):
 class CurrentUserResponse(BaseModel):
     user_id: int
     business_id: int
+    business_name: str
     name: str
     email: str
     role: str

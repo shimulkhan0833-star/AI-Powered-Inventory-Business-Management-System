@@ -31,7 +31,8 @@ python -m uvicorn app.main:app --reload
 Alembic tracks schema changes in the database. Review generated migration files
 before applying them; migrations can alter existing data and tables.
 
-Open `http://127.0.0.1:8000/docs` for the API documentation or
+Open `http://127.0.0.1:8000/` to use the web interface,
+`http://127.0.0.1:8000/docs` for the API documentation, or
 `http://127.0.0.1:8000/health` to check that the application is running.
 The health endpoint checks the application process only; it does not check a database.
 
@@ -105,8 +106,7 @@ balance and the corresponding movement are saved together. Every future
 stock-changing flow must lock the product and update both records in the same
 transaction. Quantities currently support whole units only.
 
-These endpoints require a login session. They do not yet include a visual
-interface or duplicate-request protection for
+These endpoints require a login session. They do not yet include duplicate-request protection for
 stock adjustments. Avoid retrying an adjustment until its result is known.
 
 ## Purchases and memo drafts
@@ -137,8 +137,7 @@ images are sent to Google; do not upload confidential documents without the
 business's permission. Gemini usage may incur charges.
 
 The default model is configurable because availability and pricing can vary.
-AI output is not validated for accuracy, and no visual review screen exists
-yet. See [Google's structured-output documentation](https://ai.google.dev/gemini-api/docs/structured-output)
+AI output is not validated for accuracy. See [Google's structured-output documentation](https://ai.google.dev/gemini-api/docs/structured-output)
 for the API format.
 
 ## Customers, sales, and invoices
@@ -171,7 +170,7 @@ can access their business's invoices; purchase costs are never included.
 Invoice and payment timestamps are stored as UTC and returned with a `Z`
 suffix. Older product and purchase timestamps use the database's local clock
 and have not yet been migrated to UTC. Returns, discounts, payment reversals,
-and the visual sales and customer forms are not implemented yet.
+are not implemented yet.
 
 To run the tests against an isolated in-memory database:
 
