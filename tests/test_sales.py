@@ -75,6 +75,7 @@ class SalesTests(unittest.TestCase):
         self.assertEqual(original["items"][0]["unit_price"], "500.00")
         printed = self.client.get(f"/sales/{invoice['invoice_id']}/print")
         self.assertEqual(printed.status_code, 200)
+        self.assertIn(f"INV-{invoice['invoice_id']:05d}", printed.text)
         self.assertIn("Rice", printed.text)
         self.assertNotIn("purchase_cost", printed.text)
 

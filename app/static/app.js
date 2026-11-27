@@ -4,6 +4,13 @@ const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 const esc = value => String(value ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[c]);
 const money = value => `৳${Number(value || 0).toLocaleString("en-BD", {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+const reference = (prefix, id) => `${prefix}-${String(id).padStart(5, "0")}`;
+function movementReason(movement) {
+  const reason = movement.reason || "";
+  if (movement.movement_type === "purchase") return reason.replace(/^Purchase #(\d+)$/, (_, id) => `Purchase ${reference("PUR", id)}`);
+  if (movement.movement_type === "sale") return reason.replace(/^Sale #(\d+)$/, (_, id) => `Sale ${reference("INV", id)}`);
+  return reason;
+}
 const state = {user:null, page:"dashboard", products:[], customers:[], sales:[], purchases:[], employees:[]};
 const modal = $("#modal");
 let toastTimer;
@@ -66,7 +73,7 @@ async function navigate(page) {
 function renderPage() {
   const owner = state.user.role === "owner";
   const productRows = state.products.map(p => `<tr><td><strong>${esc(p.name)}</strong><small>${esc(p.sku)}</small></td><td>${money(p.selling_price)}</td>${owner ? `<td>${p.purchase_cost == null ? "—" : money(p.purchase_cost)}</td>` : ""}<td><span class="pill ${p.stock_quantity <= 5 ? "warn" : ""}">${p.stock_quantity} in stock</span></td><td><button class="text-button" data-action="history" data-id="${p.product_id}">History</button>${owner ? ` &nbsp; <button class="text-button" data-action="edit-product" data-id="${p.product_id}">Edit</button> &nbsp; <button class="text-button" data-action="adjust" data-id="${p.product_id}">Adjust</button>` : ""}</td></tr>`);
-  const salesRows = state.sales.map(s => `<tr><td><strong>#${s.invoice_id}</strong><small>${esc((s.created_at || "").slice(0,10))}</small></td><td>${esc(s.customer_name)}</td><td>${money(s.total)}</td><td>${money(s.due)}</td><td><a href="/sales/${s.invoice_id}/print" target="_blank" rel="noopener">View invoice</a>${Number(s.due) > 0 ? ` &nbsp; <button class="text-button" data-action="payment" data-id="${s.invoice_id}">Add payment</button>` : ""}</td></tr>`);
+  const salesRows = state.sales.map(s => `<tr><td><strong>${reference("INV", s.invoice_id)}</strong><small>${esc((s.created_at || "").slice(0,10))}</small></td><td>${esc(s.customer_name)}</td><td>${money(s.total)}</td><td>${money(s.due)}</td><td><a href="/sales/${s.invoice_id}/print" target="_blank" rel="noopener">View invoice</a>${Number(s.due) > 0 ? ` &nbsp; <button class="text-button" data-action="payment" data-id="${s.invoice_id}">Add payment</button>` : ""}</td></tr>`);
   let html = "";
   if (state.page === "dashboard") {
     pageHeader("YOUR WORKSPACE", `Good to see you, ${state.user.name.split(" ")[0]}`, "Here’s a little clarity for your day.");
@@ -80,7 +87,7 @@ function renderPage() {
     html = `<div class="card"><div class="card-head"><div><h3>Product catalogue</h3><p>${state.products.length} products in your business</p></div></div><div class="toolbar"><input id="product-search" type="search" placeholder="Search by name or SKU" aria-label="Search products"></div><div id="product-table">${table(["Product","Selling price",...(owner?["Purchase cost"]:[]),"Available",""],productRows,"No products yet.")}</div></div>`;
   } else if (state.page === "purchases") {
     pageHeader("STOCK COMING IN", "Purchases", "Record what arrives from your suppliers.", button("Scan memo", "memo") + button("+ New purchase", "new-purchase", true));
-    const rows = state.purchases.map(p => `<tr><td><strong>#${p.purchase_id}</strong><small>${esc((p.created_at || "").slice(0,10))}</small></td><td>${esc(p.supplier_name || "Not specified")}</td><td>${p.items.length} item(s)</td><td>${money(p.total)}</td></tr>`);
+    const rows = state.purchases.map(p => `<tr><td><strong>${reference("PUR", p.purchase_id)}</strong><small>${esc((p.created_at || "").slice(0,10))}</small></td><td>${esc(p.supplier_name || "Not specified")}</td><td>${p.items.length} item(s)</td><td>${money(p.total)}</td></tr>`);
     html = `<div class="card"><div class="card-head"><div><h3>Purchase history</h3><p>Every saved purchase adds to stock.</p></div></div>${table(["Purchase","Supplier","Items","Total"],rows,"No purchases yet. Add one manually or scan a memo.")}</div>`;
   } else if (state.page === "sales") {
     pageHeader("YOUR TRANSACTIONS", "Sales", "Create invoices and keep track of payments.", button("+ New sale", "new-sale", true));
@@ -145,7 +152,7 @@ async function submitForm(form) {
     await api("/purchases", {method:"POST", json:data, headers:{"Idempotency-Key":pending.key}}); pending.clear(); notify("Purchase saved and stock updated.");
   } else if (id === "sale-form") {
     const data = {customer_id:Number(values.customer_id), items:readLines(form), initial_payment:values.initial_payment}; const pending = pendingKey("sale",data);
-    const invoice = await api("/sales", {method:"POST", json:data, headers:{"Idempotency-Key":pending.key}}); pending.clear(); closeModal(); notify(`Invoice #${invoice.invoice_id} saved.`); await navigate("sales"); return;
+    const invoice = await api("/sales", {method:"POST", json:data, headers:{"Idempotency-Key":pending.key}}); pending.clear(); closeModal(); notify(`Invoice ${reference("INV", invoice.invoice_id)} saved.`); await navigate("sales"); return;
   } else if (id === "payment-form") {
     const data = {amount:values.amount}; const pending = pendingKey(`payment.${form.dataset.id}`,data);
     await api(`/sales/${form.dataset.id}/payments`, {method:"POST", json:data, headers:{"Idempotency-Key":pending.key}}); pending.clear(); notify("Payment recorded.");
@@ -171,7 +178,7 @@ document.addEventListener("click", async event => {
     else if (action === "refresh") await navigate(state.page);
     else if (action === "new-product") productForm();
     else if (action === "edit-product") productForm(state.products.find(p => p.product_id === id));
-    else if (action === "history") { const p = state.products.find(p => p.product_id === id); const rows = await api(`/products/${id}/history`); openModal(`${p.name} · stock history`, `<div class="history-list">${rows.length ? rows.map(r => `<div class="history-item"><strong>${r.quantity_change > 0 ? "+" : ""}${r.quantity_change} · ${esc(r.movement_type)}</strong>${r.reason ? ` · ${esc(r.reason)}` : ""}<small>${esc(r.created_at)} · User #${r.user_id}</small></div>`).join("") : `<p class="muted">No stock movements yet.</p>`}</div>`, "PRODUCTS & STOCK"); }
+    else if (action === "history") { const p = state.products.find(p => p.product_id === id); const rows = await api(`/products/${id}/history`); openModal(`${p.name} · stock history`, `<div class="history-list">${rows.length ? rows.map(r => `<div class="history-item"><strong>${r.quantity_change > 0 ? "+" : ""}${r.quantity_change} · ${esc(r.movement_type)}</strong>${r.reason ? ` · ${esc(movementReason(r))}` : ""}<small>${esc(r.created_at)} · User #${r.user_id}</small></div>`).join("") : `<p class="muted">No stock movements yet.</p>`}</div>`, "PRODUCTS & STOCK"); }
     else if (action === "adjust") { const p = state.products.find(p => p.product_id === id); openModal("Adjust stock", `<p class="muted">${esc(p.name)} currently has ${p.stock_quantity} units.</p><p class="info warning">If your connection fails, check stock history before retrying an adjustment.</p><form id="adjust-form" data-id="${id}" class="form-stack"><label>Change in quantity <small>Use a negative number to reduce stock.</small><input name="quantity_change" type="number" step="1" required></label><label>Reason<input name="reason" maxlength="255" required></label>${actions("Save adjustment")}</form>`, "PRODUCTS & STOCK"); }
     else if (action === "new-customer") openModal("Add customer", `<form id="customer-form" class="form-stack"><label>Customer name<input name="name" maxlength="150" required></label><label>Phone <small>Optional</small><input name="phone" type="tel" maxlength="40"></label>${actions("Add customer")}</form>`, "CUSTOMERS");
     else if (action === "new-employee") openModal("Add salesperson", `<p class="muted">Set the credentials your salesperson will use to sign in.</p><form id="employee-form" class="form-stack"><label>Name<input name="name" maxlength="150" required></label><label>Email<input name="email" type="email" required></label><label>Password<input name="password" type="password" minlength="8" maxlength="128" required><small>Share it privately. Password changes are not available yet.</small></label>${actions("Add salesperson")}</form>`, "TEAM");
@@ -181,7 +188,7 @@ document.addEventListener("click", async event => {
     else if (action === "add-purchase-line") $("#purchase-lines").insertAdjacentHTML("beforeend", purchaseRow());
     else if (action === "add-sale-line") $("#sale-lines").insertAdjacentHTML("beforeend", saleRow());
     else if (action === "remove-line") target.closest(".line-row").remove();
-    else if (action === "payment") { const invoice = state.sales.find(s => s.invoice_id === id); openModal("Record a payment", `<p class="muted">Invoice #${id} · ${esc(invoice.customer_name)}</p><p class="info">Outstanding due: <strong>${money(invoice.due)}</strong></p><form id="payment-form" data-id="${id}" class="form-stack"><label>Amount received ৳<input name="amount" type="number" min="0.01" max="${esc(invoice.due)}" step="0.01" required></label>${actions("Record payment")}</form>`, "CUSTOMER DUES"); }
+    else if (action === "payment") { const invoice = state.sales.find(s => s.invoice_id === id); openModal("Record a payment", `<p class="muted">Invoice ${reference("INV", id)} · ${esc(invoice.customer_name)}</p><p class="info">Outstanding due: <strong>${money(invoice.due)}</strong></p><form id="payment-form" data-id="${id}" class="form-stack"><label>Amount received ৳<input name="amount" type="number" min="0.01" max="${esc(invoice.due)}" step="0.01" required></label>${actions("Record payment")}</form>`, "CUSTOMER DUES"); }
     else if (action === "memo") openModal("Scan a purchase memo", `<p class="muted">Upload a clear photo of a supplier memo. You’ll review the draft before anything is saved.</p><p class="info">The photo is sent to Google for extraction. Use JPEG or PNG, up to 5 MB. If scanning fails, enter the purchase manually.</p><form id="memo-form" class="form-stack"><label>Memo photo<input name="file" type="file" accept="image/png,image/jpeg" required></label>${actions("Read memo")}</form>`, "PURCHASES");
   } catch (error) { notify(error.message, true); }
 });

@@ -59,6 +59,10 @@ API responses now use these names instead of a generic `id` (for example,
 `product_id` and `invoice_id`). Existing API clients using `id` must be updated.
 The identifier migration preserves existing values and relationships.
 
+The interface displays purchase and invoice numbers with prefixes, for example
+`PUR-00025` and `INV-00025`. The underlying database IDs and API fields remain
+numeric; the prefixes are only for display.
+
 ## Register a business
 
 Use `POST /auth/register` in `/docs` with `business_name`, `owner_name`,
