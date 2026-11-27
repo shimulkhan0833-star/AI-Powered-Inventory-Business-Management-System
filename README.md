@@ -94,8 +94,40 @@ stock-changing flow must lock the product and update both records in the same
 transaction. Quantities currently support whole units only.
 
 These endpoints require a login session. They do not yet include a visual
-interface, purchase and sales flows, or duplicate-request protection for
+interface, a sales flow, or duplicate-request protection for
 stock adjustments. Avoid retrying an adjustment until its result is known.
+
+## Purchases and memo drafts
+
+Owners can create a manual purchase with `POST /purchases`. Include an
+`Idempotency-Key` header containing a UUID, and a body such as:
+
+```json
+{
+  "supplier_name": "Example supplier",
+  "items": [{"product_id": 1, "quantity": 5, "unit_price": "100.00"}]
+}
+```
+
+Reuse the same key and identical purchase details when retrying. The first
+successful request returns 201; a retry returns the same purchase with 200.
+Reusing the key with different details returns 409. Stock, purchase items,
+and stock movements are committed together. `GET /purchases` and
+`GET /purchases/{id}` are owner-only because they expose purchase prices.
+
+`POST /purchases/memo-draft` accepts a JPEG or PNG up to 5 MB as a multipart
+`file`. It sends the image to Google's Gemini API using `GOOGLE_API_KEY` and
+the optional `GEMINI_MODEL` setting. It returns an untrusted draft only: the
+owner must review all fields, match items to product IDs, and submit the
+normal purchase request to save. If the service is unavailable, the endpoint
+returns 503 and the manual purchase endpoint remains available. Uploaded
+images are sent to Google; do not upload confidential documents without the
+business's permission. Gemini usage may incur charges.
+
+The default model is configurable because availability and pricing can vary.
+AI output is not validated for accuracy, and no visual review screen exists
+yet. See [Google's structured-output documentation](https://ai.google.dev/gemini-api/docs/structured-output)
+for the API format.
 
 To run the tests against an isolated in-memory database:
 
