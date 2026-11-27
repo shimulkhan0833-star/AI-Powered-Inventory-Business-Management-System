@@ -94,7 +94,7 @@ stock-changing flow must lock the product and update both records in the same
 transaction. Quantities currently support whole units only.
 
 These endpoints require a login session. They do not yet include a visual
-interface, a sales flow, or duplicate-request protection for
+interface or duplicate-request protection for
 stock adjustments. Avoid retrying an adjustment until its result is known.
 
 ## Purchases and memo drafts
@@ -128,6 +128,38 @@ The default model is configurable because availability and pricing can vary.
 AI output is not validated for accuracy, and no visual review screen exists
 yet. See [Google's structured-output documentation](https://ai.google.dev/gemini-api/docs/structured-output)
 for the API format.
+
+## Customers, sales, and invoices
+
+Both owners and salespeople can create customers with `POST /customers` and
+view their running dues at `GET /customers` or `GET /customers/{id}`.
+Create a sale with `POST /sales`, a UUID `Idempotency-Key` header, and a body:
+
+```json
+{
+  "customer_id": 1,
+  "items": [{"product_id": 1, "quantity": 2}],
+  "initial_payment": "400.00"
+}
+```
+
+The server uses the product's current selling price; clients cannot submit a
+price. Each invoice stores the names, SKU, and price at the time of sale.
+Stock is locked and checked before the invoice, initial payment, and movements
+are committed together. A retry with the same key and body returns the existing
+invoice; a different body with that key returns 409.
+
+Record subsequent payments with `POST /sales/{invoice_id}/payments` using a
+new UUID `Idempotency-Key` and a body such as `{"amount":"200.00"}`. Reuse
+that key on a retry. Payments greater than the remaining invoice due are
+rejected. `GET /sales/{id}` returns the invoice and current paid/due amounts;
+`GET /sales/{id}/print` shows a printable invoice in the browser. Both roles
+can access their business's invoices; purchase costs are never included.
+
+Invoice and payment timestamps are stored as UTC and returned with a `Z`
+suffix. Older product and purchase timestamps use the database's local clock
+and have not yet been migrated to UTC. Returns, discounts, payment reversals,
+and the visual sales and customer forms are not implemented yet.
 
 To run the tests against an isolated in-memory database:
 

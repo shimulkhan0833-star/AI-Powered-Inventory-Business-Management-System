@@ -1,0 +1,34 @@
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from app.core.dependencies import get_current_user
+from app.database import get_db
+from app.models import Customer, User
+from app.schemas.sale import CustomerCreate, CustomerResponse
+from app.services.sales import customer_response
+
+router = APIRouter(prefix="/customers", tags=["Customers and dues"])
+
+
+@router.post("", response_model=CustomerResponse, status_code=201)
+def add_customer(data: CustomerCreate, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    customer = Customer(business_id=user.business_id, name=data.name, phone=data.phone)
+    db.add(customer)
+    db.commit()
+    db.refresh(customer)
+    return customer_response(db, customer)
+
+
+@router.get("", response_model=list[CustomerResponse])
+def list_customers(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    customers = db.scalars(select(Customer).where(Customer.business_id == user.business_id).order_by(Customer.id)).all()
+    return [customer_response(db, customer) for customer in customers]
+
+
+@router.get("/{customer_id}", response_model=CustomerResponse)
+def read_customer(customer_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    customer = db.scalar(select(Customer).where(Customer.id == customer_id, Customer.business_id == user.business_id))
+    if customer is None:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    return customer_response(db, customer)
