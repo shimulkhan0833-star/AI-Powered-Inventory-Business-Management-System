@@ -13,7 +13,7 @@ class EmailAlreadyRegistered(Exception):
 
 def register_business(db: Session, data: BusinessRegistration) -> tuple[Business, User]:
     email = str(data.email)
-    if db.scalar(select(User.id).where(User.email == email)) is not None:
+    if db.scalar(select(User.user_id).where(User.email == email)) is not None:
         raise EmailAlreadyRegistered
 
     password_hash = hash_password(data.password)
@@ -22,7 +22,7 @@ def register_business(db: Session, data: BusinessRegistration) -> tuple[Business
         db.add(business)
         db.flush()
         owner = User(
-            business_id=business.id,
+            business_id=business.business_id,
             name=data.owner_name,
             email=email,
             password_hash=password_hash,
@@ -34,7 +34,7 @@ def register_business(db: Session, data: BusinessRegistration) -> tuple[Business
     except IntegrityError:
         db.rollback()
         # The unique constraint also handles concurrent registrations.
-        if db.scalar(select(User.id).where(User.email == email)) is not None:
+        if db.scalar(select(User.user_id).where(User.email == email)) is not None:
             raise EmailAlreadyRegistered from None
         raise
     except Exception:

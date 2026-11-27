@@ -11,12 +11,12 @@ class Purchase(Base):
     __tablename__ = "purchases"
     __table_args__ = (
         UniqueConstraint("business_id", "idempotency_key", name="uq_purchases_business_key"),
-        UniqueConstraint("business_id", "id", name="uq_purchases_business_id_id"),
+        UniqueConstraint("business_id", "purchase_id", name="uq_purchases_business_id_id"),
     )
 
-    id: Mapped[int] = mapped_column(primary_key=True)
-    business_id: Mapped[int] = mapped_column(ForeignKey("businesses.id"), nullable=False)
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    purchase_id: Mapped[int] = mapped_column(primary_key=True)
+    business_id: Mapped[int] = mapped_column(ForeignKey("businesses.business_id"), nullable=False)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.user_id"), nullable=False)
     supplier_name: Mapped[str | None] = mapped_column(String(150))
     total: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
     idempotency_key: Mapped[str] = mapped_column(String(100), nullable=False)
@@ -27,13 +27,13 @@ class Purchase(Base):
 class PurchaseItem(Base):
     __tablename__ = "purchase_items"
     __table_args__ = (
-        ForeignKeyConstraint(["business_id", "purchase_id"], ["purchases.business_id", "purchases.id"]),
-        ForeignKeyConstraint(["business_id", "product_id"], ["products.business_id", "products.id"]),
+        ForeignKeyConstraint(["business_id", "purchase_id"], ["purchases.business_id", "purchases.purchase_id"]),
+        ForeignKeyConstraint(["business_id", "product_id"], ["products.business_id", "products.product_id"]),
         UniqueConstraint("purchase_id", "product_id", name="uq_purchase_item_product"),
         Index("ix_purchase_items_business_purchase", "business_id", "purchase_id"),
     )
 
-    id: Mapped[int] = mapped_column(primary_key=True)
+    purchase_item_id: Mapped[int] = mapped_column(primary_key=True)
     business_id: Mapped[int] = mapped_column(nullable=False)
     purchase_id: Mapped[int] = mapped_column(nullable=False)
     product_id: Mapped[int] = mapped_column(nullable=False)

@@ -27,7 +27,7 @@ class MySQLSalesConcurrencyTests(unittest.TestCase):
                 business = Business(name=f"Concurrency test {marker}")
                 db.add(business)
                 db.flush()
-                business_id = business.id
+                business_id = business.business_id
                 owner = User(business_id=business_id, name="Test", email=f"{marker}@example.invalid",
                              password_hash="test-only", role="owner")
                 customer = Customer(business_id=business_id, name="Test customer")
@@ -35,7 +35,7 @@ class MySQLSalesConcurrencyTests(unittest.TestCase):
                                   selling_price=Decimal("10"), stock_quantity=1)
                 db.add_all([owner, customer, product])
                 db.flush()
-                user_id, customer_id, product_id = owner.id, customer.id, product.id
+                user_id, customer_id, product_id = owner.user_id, customer.customer_id, product.product_id
                 db.commit()
 
             barrier = threading.Barrier(2)
@@ -58,7 +58,7 @@ class MySQLSalesConcurrencyTests(unittest.TestCase):
                 self.assertEqual(db.get(Product, product_id).stock_quantity, 0)
                 invoices = db.scalars(select(SalesInvoice).where(SalesInvoice.business_id == business_id)).all()
                 self.assertEqual(len(invoices), 1)
-                invoice_id = invoices[0].id
+                invoice_id = invoices[0].invoice_id
 
             barrier = threading.Barrier(2)
 
@@ -81,11 +81,11 @@ class MySQLSalesConcurrencyTests(unittest.TestCase):
             if business_id is not None:
                 with Session(engine) as db:
                     # Restrict cleanup to the business created by this test.
-                    fixture = db.scalar(select(Business.id).where(
-                        Business.id == business_id, Business.name == f"Concurrency test {marker}"
+                    fixture = db.scalar(select(Business.business_id).where(
+                        Business.business_id == business_id, Business.name == f"Concurrency test {marker}"
                     ))
                     if fixture is not None:
                         for model in (StockMovement, Payment, SalesInvoiceItem, SalesInvoice, Product, Customer, User):
                             db.execute(delete(model).where(model.business_id == business_id))
-                        db.execute(delete(Business).where(Business.id == business_id, Business.name == f"Concurrency test {marker}"))
+                        db.execute(delete(Business).where(Business.business_id == business_id, Business.name == f"Concurrency test {marker}"))
                         db.commit()

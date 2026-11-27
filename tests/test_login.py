@@ -25,7 +25,7 @@ class LoginTests(unittest.TestCase):
             db.add(business)
             db.flush()
             for role in ("owner", "salesperson"):
-                db.add(User(business_id=business.id, name=role, email=f"{role}@example.com",
+                db.add(User(business_id=business.business_id, name=role, email=f"{role}@example.com",
                             password_hash=hash_password("password123"), role=role))
             db.commit()
 

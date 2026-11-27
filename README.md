@@ -46,6 +46,18 @@ app/
 migrations/           # Alembic schema migrations
 ```
 
+## Database identifiers
+
+Each table uses a descriptive primary key: `business_id`, `user_id`,
+`session_id`, `customer_id`, `product_id`, `purchase_id`, `purchase_item_id`,
+`invoice_id`, `invoice_item_id`, `payment_id`, or `movement_id`. Foreign keys
+use the same name as the identifier they refer to. For example,
+`products.business_id` references `businesses.business_id`.
+
+API responses now use these names instead of a generic `id` (for example,
+`product_id` and `invoice_id`). Existing API clients using `id` must be updated.
+The identifier migration preserves existing values and relationships.
+
 ## Register a business
 
 Use `POST /auth/register` in `/docs` with `business_name`, `owner_name`,
@@ -71,7 +83,7 @@ to be implemented before production use.
 
 An authenticated owner can use `POST /employees` to create a salesperson using
 their name, email, and password, `GET /employees` to list salespeople in their
-business, and `PATCH /employees/{id}/deactivate` to disable access. Salespeople
+business, and `PATCH /employees/{employee_id}/deactivate` to disable access. Salespeople
 cannot use these endpoints. The owner must share credentials privately; there
 is currently no password-change or password-reset feature.
 
@@ -82,12 +94,12 @@ price, optional purchase cost and SKU, and optional whole-number opening stock.
 When no SKU is provided, the server generates one. SKUs are unique per business.
 
 Both roles can list products with `GET /products`, view one with
-`GET /products/{id}`, read its current stock at `GET /products/{id}/stock`, and
-view stock history at `GET /products/{id}/history`. Salesperson responses do
+`GET /products/{product_id}`, read its current stock at `GET /products/{product_id}/stock`, and
+view stock history at `GET /products/{product_id}/history`. Salesperson responses do
 not include purchase costs or free-text adjustment reasons.
 
-Only owners can update product details with `PATCH /products/{id}` or adjust
-stock with `POST /products/{id}/adjustments`, providing a signed
+Only owners can update product details with `PATCH /products/{product_id}` or adjust
+stock with `POST /products/{product_id}/adjustments`, providing a signed
 `quantity_change` and a `reason`. Stock may not go below zero. The product's
 balance and the corresponding movement are saved together. Every future
 stock-changing flow must lock the product and update both records in the same
@@ -113,7 +125,7 @@ Reuse the same key and identical purchase details when retrying. The first
 successful request returns 201; a retry returns the same purchase with 200.
 Reusing the key with different details returns 409. Stock, purchase items,
 and stock movements are committed together. `GET /purchases` and
-`GET /purchases/{id}` are owner-only because they expose purchase prices.
+`GET /purchases/{purchase_id}` are owner-only because they expose purchase prices.
 
 `POST /purchases/memo-draft` accepts a JPEG or PNG up to 5 MB as a multipart
 `file`. It sends the image to Google's Gemini API using `GOOGLE_API_KEY` and
@@ -132,7 +144,7 @@ for the API format.
 ## Customers, sales, and invoices
 
 Both owners and salespeople can create customers with `POST /customers` and
-view their running dues at `GET /customers` or `GET /customers/{id}`.
+view their running dues at `GET /customers` or `GET /customers/{customer_id}`.
 Create a sale with `POST /sales`, a UUID `Idempotency-Key` header, and a body:
 
 ```json
@@ -152,8 +164,8 @@ invoice; a different body with that key returns 409.
 Record subsequent payments with `POST /sales/{invoice_id}/payments` using a
 new UUID `Idempotency-Key` and a body such as `{"amount":"200.00"}`. Reuse
 that key on a retry. Payments greater than the remaining invoice due are
-rejected. `GET /sales/{id}` returns the invoice and current paid/due amounts;
-`GET /sales/{id}/print` shows a printable invoice in the browser. Both roles
+rejected. `GET /sales/{invoice_id}` returns the invoice and current paid/due amounts;
+`GET /sales/{invoice_id}/print` shows a printable invoice in the browser. Both roles
 can access their business's invoices; purchase costs are never included.
 
 Invoice and payment timestamps are stored as UTC and returned with a `Z`

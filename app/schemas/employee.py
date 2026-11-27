@@ -20,7 +20,7 @@ class EmployeeCreate(BaseModel):
 class EmployeeResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: int
+    user_id: int
     name: str
     email: str
     role: str

@@ -25,8 +25,8 @@ def register(data: BusinessRegistration, db: Session = Depends(get_db)):
             detail="An account with this email already exists.",
         ) from None
     return RegistrationResponse(
-        business_id=business.id,
-        user_id=owner.id,
+        business_id=business.business_id,
+        user_id=owner.user_id,
         business_name=business.name,
         owner_name=owner.name,
         email=owner.email,
@@ -36,7 +36,7 @@ def register(data: BusinessRegistration, db: Session = Depends(get_db)):
 
 def user_response(user: User) -> CurrentUserResponse:
     return CurrentUserResponse(
-        user_id=user.id, business_id=user.business_id, name=user.name,
+        user_id=user.user_id, business_id=user.business_id, name=user.name,
         email=user.email, role=user.role, must_change_password=user.must_change_password,
     )
 

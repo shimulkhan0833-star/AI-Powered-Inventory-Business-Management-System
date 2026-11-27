@@ -21,10 +21,10 @@ class ProductTests(unittest.TestCase):
                 business = Business(name=name)
                 db.add(business)
                 db.flush()
-                db.add(User(business_id=business.id, name="Owner", email=email,
+                db.add(User(business_id=business.business_id, name="Owner", email=email,
                             password_hash=hash_password("owner-password"), role="owner"))
                 if name == "Shop A":
-                    db.add(User(business_id=business.id, name="Staff", email="staff@example.com",
+                    db.add(User(business_id=business.business_id, name="Staff", email="staff@example.com",
                                 password_hash=hash_password("staff-password"), role="salesperson"))
             db.commit()
 
@@ -51,7 +51,7 @@ class ProductTests(unittest.TestCase):
         self.login()
         result = self.client.post("/products", json=self.product)
         self.assertEqual(result.status_code, 201)
-        product_id = result.json()["id"]
+        product_id = result.json()["product_id"]
         self.assertEqual(result.json()["stock_quantity"], 10)
         self.assertEqual(self.client.post("/products", json=self.product).status_code, 409)
         auto = self.client.post("/products", json={"name": "Oil", "selling_price": "50"})
@@ -65,7 +65,7 @@ class ProductTests(unittest.TestCase):
 
     def test_adjustment_history_and_nonnegative_stock(self):
         self.login()
-        product_id = self.client.post("/products", json=self.product).json()["id"]
+        product_id = self.client.post("/products", json=self.product).json()["product_id"]
         result = self.client.post(f"/products/{product_id}/adjustments", json={"quantity_change": -3, "reason": "Damaged"})
         self.assertEqual(result.json()["stock_quantity"], 7)
         self.assertEqual(self.client.post(f"/products/{product_id}/adjustments", json={"quantity_change": -8, "reason": "Count"}).status_code, 409)
@@ -80,7 +80,7 @@ class ProductTests(unittest.TestCase):
 
     def test_salesperson_access_does_not_expose_cost(self):
         self.login()
-        product_id = self.client.post("/products", json=self.product).json()["id"]
+        product_id = self.client.post("/products", json=self.product).json()["product_id"]
         self.login("staff@example.com", role="salesperson", password="staff-password")
         for path in ("/products", f"/products/{product_id}", f"/products/{product_id}/stock", f"/products/{product_id}/history"):
             response = self.client.get(path)
@@ -95,10 +95,10 @@ class ProductTests(unittest.TestCase):
         self.login()
         first = self.client.post("/products", json=self.product).json()
         second = self.client.post("/products", json={"name": "Oil", "sku": "OIL", "selling_price": "12.50"}).json()
-        self.assertEqual(self.client.patch(f"/products/{second['id']}", json={"sku": first["sku"]}).status_code, 409)
+        self.assertEqual(self.client.patch(f"/products/{second['product_id']}", json={"sku": first["sku"]}).status_code, 409)
         for invalid in ({"selling_price": "-1"}, {"opening_stock": -1}, {"name": "  "}, {"selling_price": "1.001"}):
             self.assertEqual(self.client.post("/products", json={**self.product, **invalid}).status_code, 422)
-        self.assertEqual(self.client.patch(f"/products/{first['id']}", json={"stock_quantity": 99}).status_code, 422)
+        self.assertEqual(self.client.patch(f"/products/{first['product_id']}", json={"stock_quantity": 99}).status_code, 422)
 
 
 if __name__ == "__main__":

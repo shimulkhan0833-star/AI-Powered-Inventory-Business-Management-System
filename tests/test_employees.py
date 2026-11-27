@@ -21,7 +21,7 @@ class EmployeeTests(unittest.TestCase):
                 business = Business(name=name)
                 db.add(business)
                 db.flush()
-                db.add(User(business_id=business.id, name="Owner", email=email,
+                db.add(User(business_id=business.business_id, name="Owner", email=email,
                             password_hash=hash_password("owner-password"), role="owner"))
             db.commit()
 
@@ -49,7 +49,7 @@ class EmployeeTests(unittest.TestCase):
         self.assertNotIn("password", result.json())
         self.assertEqual(result.json()["role"], "salesperson")
         with self.sessions() as db:
-            employee = db.get(User, result.json()["id"])
+            employee = db.get(User, result.json()["user_id"])
             self.assertEqual(employee.business_id, 1)
             self.assertTrue(verify_password(payload["password"], employee.password_hash))
         self.assertEqual(self.client.post("/employees", json=payload).status_code, 409)
@@ -60,7 +60,7 @@ class EmployeeTests(unittest.TestCase):
     def test_tenant_isolation_and_deactivation(self):
         self.login("a@example.com", "owner-password", "owner", "Shop A")
         result = self.client.post("/employees", json={"name": "Staff", "email": "s@example.com", "password": "staff-password"})
-        employee_id = result.json()["id"]
+        employee_id = result.json()["user_id"]
         self.login("b@example.com", "owner-password", "owner", "Shop B")
         self.assertEqual(self.client.get("/employees").json(), [])
         self.assertEqual(self.client.patch(f"/employees/{employee_id}/deactivate").status_code, 404)

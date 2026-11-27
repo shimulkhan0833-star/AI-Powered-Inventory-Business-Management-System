@@ -23,13 +23,13 @@ class SalesTests(unittest.TestCase):
                 business = Business(name=name)
                 db.add(business)
                 db.flush()
-                db.add(User(business_id=business.id, name="Owner", email=email,
+                db.add(User(business_id=business.business_id, name="Owner", email=email,
                             password_hash=hash_password("password123"), role="owner"))
-                db.add(Customer(business_id=business.id, name="Customer", phone=None))
-                db.add(Product(business_id=business.id, name="Rice", sku="RICE", selling_price=Decimal("500"),
+                db.add(Customer(business_id=business.business_id, name="Customer", phone=None))
+                db.add(Product(business_id=business.business_id, name="Rice", sku="RICE", selling_price=Decimal("500"),
                                purchase_cost=Decimal("400"), stock_quantity=5))
                 if name == "Shop A":
-                    db.add(User(business_id=business.id, name="Staff", email="staff@example.com",
+                    db.add(User(business_id=business.business_id, name="Staff", email="staff@example.com",
                                 password_hash=hash_password("password123"), role="salesperson"))
             db.commit()
 
@@ -66,14 +66,14 @@ class SalesTests(unittest.TestCase):
             product = db.get(Product, 1)
             self.assertEqual(product.stock_quantity, 3)
             movement = db.scalar(select(StockMovement))
-            self.assertEqual((movement.quantity_change, movement.sales_invoice_id), (-2, invoice["id"]))
+            self.assertEqual((movement.quantity_change, movement.invoice_id), (-2, invoice["invoice_id"]))
             product.name = "New name"
             product.selling_price = Decimal("900")
             db.commit()
-        original = self.client.get(f"/sales/{invoice['id']}").json()
+        original = self.client.get(f"/sales/{invoice['invoice_id']}").json()
         self.assertEqual(original["items"][0]["product_name"], "Rice")
         self.assertEqual(original["items"][0]["unit_price"], "500.00")
-        printed = self.client.get(f"/sales/{invoice['id']}/print")
+        printed = self.client.get(f"/sales/{invoice['invoice_id']}/print")
         self.assertEqual(printed.status_code, 200)
         self.assertIn("Rice", printed.text)
         self.assertNotIn("purchase_cost", printed.text)
@@ -83,7 +83,7 @@ class SalesTests(unittest.TestCase):
         invoice = self.client.post("/sales", json=self.payload, headers={"Idempotency-Key": str(uuid4())}).json()
         self.assertEqual(self.client.get("/customers/1").json()["due"], "600.00")
         key = str(uuid4())
-        path = f"/sales/{invoice['id']}/payments"
+        path = f"/sales/{invoice['invoice_id']}/payments"
         self.assertEqual(self.client.post(path, json={"amount": "200"}, headers={"Idempotency-Key": key}).status_code, 201)
         self.assertEqual(self.client.post(path, json={"amount": "200"}, headers={"Idempotency-Key": key}).status_code, 200)
         self.assertEqual(self.client.post(path, json={"amount": "201"}, headers={"Idempotency-Key": key}).status_code, 409)
@@ -91,7 +91,7 @@ class SalesTests(unittest.TestCase):
         self.assertEqual(self.client.post(path, json={"amount": "0"}, headers={"Idempotency-Key": str(uuid4())}).status_code, 422)
         self.assertEqual(self.client.get("/customers/1").json()["due"], "400.00")
         with self.sessions() as db:
-            self.assertEqual(db.scalar(select(func.sum(Payment.amount)).where(Payment.invoice_id == invoice["id"])), Decimal("600"))
+            self.assertEqual(db.scalar(select(func.sum(Payment.amount)).where(Payment.invoice_id == invoice["invoice_id"])), Decimal("600"))
 
     def test_invalid_sale_rolls_back_and_rejects_overpayment(self):
         self.login()
@@ -113,8 +113,8 @@ class SalesTests(unittest.TestCase):
         self.assertEqual(self.client.post("/sales", json=supplied_price, headers={"Idempotency-Key": str(uuid4())}).status_code, 422)
         invoice = self.client.post("/sales", json=self.payload, headers={"Idempotency-Key": str(uuid4())}).json()
         self.login("b@example.com", role="owner", business="Shop B")
-        self.assertEqual(self.client.get(f"/sales/{invoice['id']}").status_code, 404)
-        self.assertEqual(self.client.post(f"/sales/{invoice['id']}/payments", json={"amount": "1"}, headers={"Idempotency-Key": str(uuid4())}).status_code, 404)
+        self.assertEqual(self.client.get(f"/sales/{invoice['invoice_id']}").status_code, 404)
+        self.assertEqual(self.client.post(f"/sales/{invoice['invoice_id']}/payments", json={"amount": "1"}, headers={"Idempotency-Key": str(uuid4())}).status_code, 404)
         self.assertEqual(self.client.get("/customers/1").status_code, 404)
 
 

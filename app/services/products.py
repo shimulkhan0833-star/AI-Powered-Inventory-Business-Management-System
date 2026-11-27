@@ -25,7 +25,7 @@ class InvalidStock(Exception):
 
 
 def get_product(db: Session, business_id: int, product_id: int, *, lock: bool = False) -> Product:
-    query = select(Product).where(Product.business_id == business_id, Product.id == product_id)
+    query = select(Product).where(Product.business_id == business_id, Product.product_id == product_id)
     if lock:
         query = query.with_for_update().execution_options(populate_existing=True)
     product = db.scalar(query)
@@ -39,7 +39,7 @@ def commit_or_duplicate(db: Session, business_id: int, sku: str, product_id: int
         db.commit()
     except IntegrityError:
         db.rollback()
-        existing_id = db.scalar(select(Product.id).where(Product.business_id == business_id, Product.sku == sku))
+        existing_id = db.scalar(select(Product.product_id).where(Product.business_id == business_id, Product.sku == sku))
         if existing_id is not None and existing_id != product_id:
             raise DuplicateSKU from None
         raise
@@ -54,14 +54,14 @@ def create_product(db: Session, owner: User, data: ProductCreate) -> Product:
     try:
         db.flush()
         if data.opening_stock:
-            db.add(StockMovement(business_id=owner.business_id, product_id=product.id,
-                                 user_id=owner.id, quantity_change=data.opening_stock,
+            db.add(StockMovement(business_id=owner.business_id, product_id=product.product_id,
+                                 user_id=owner.user_id, quantity_change=data.opening_stock,
                                  movement_type="opening", reason="Opening stock"))
         commit_or_duplicate(db, owner.business_id, sku)
     except IntegrityError:
         # An SKU conflict can also be raised by flush before commit.
         db.rollback()
-        if db.scalar(select(Product.id).where(Product.business_id == owner.business_id, Product.sku == sku)) is not None:
+        if db.scalar(select(Product.product_id).where(Product.business_id == owner.business_id, Product.sku == sku)) is not None:
             raise DuplicateSKU from None
         raise
     db.refresh(product)
@@ -72,7 +72,7 @@ def update_product(db: Session, owner: User, product_id: int, data: ProductUpdat
     product = get_product(db, owner.business_id, product_id, lock=True)
     for field, value in data.model_dump(exclude_unset=True).items():
         setattr(product, field, value)
-    commit_or_duplicate(db, owner.business_id, product.sku, product.id)
+    commit_or_duplicate(db, owner.business_id, product.sku, product.product_id)
     db.refresh(product)
     return product
 
@@ -85,8 +85,8 @@ def adjust_stock(db: Session, owner: User, product_id: int, data: AdjustmentCrea
         db.rollback()
         raise InvalidStock
     product.stock_quantity = new_quantity
-    db.add(StockMovement(business_id=owner.business_id, product_id=product.id,
-                         user_id=owner.id, quantity_change=data.quantity_change,
+    db.add(StockMovement(business_id=owner.business_id, product_id=product.product_id,
+                         user_id=owner.user_id, quantity_change=data.quantity_change,
                          movement_type="adjustment", reason=data.reason))
     db.commit()
     db.refresh(product)

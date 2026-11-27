@@ -37,7 +37,7 @@ def add_sale(data: SaleCreate, response: Response, idempotency_key: UUID = Heade
 @router.get("", response_model=list[SaleResponse])
 def list_sales(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     invoices = db.scalars(select(SalesInvoice).where(SalesInvoice.business_id == user.business_id)
-                          .order_by(SalesInvoice.id.desc())).all()
+                          .order_by(SalesInvoice.invoice_id.desc())).all()
     return [invoice_response(db, invoice) for invoice in invoices]
 
 
@@ -75,11 +75,11 @@ def print_invoice(invoice_id: int, user: User = Depends(get_current_user), db: S
                    f"<td>{item.unit_price:.2f}</td><td>{item.quantity * item.unit_price:.2f}</td></tr>"
                    for item in invoice.items)
     html = f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1"><title>Invoice {invoice.id}</title>
+<meta name="viewport" content="width=device-width, initial-scale=1"><title>Invoice {invoice.invoice_id}</title>
 <style>body{{font:16px Arial,sans-serif;max-width:750px;margin:2rem auto;padding:0 1rem;color:#222}}
 table{{border-collapse:collapse;width:100%}}th,td{{padding:.6rem;border-bottom:1px solid #ddd;text-align:left}}
 .totals{{text-align:right}}@media print{{button{{display:none}}}}</style></head><body>
-<h1>{escape(invoice.business_name)}</h1><h2>Invoice #{invoice.id}</h2>
+<h1>{escape(invoice.business_name)}</h1><h2>Invoice #{invoice.invoice_id}</h2>
 <p>Customer: {escape(invoice.customer_name)}<br>Salesperson: {escape(invoice.salesperson_name)}<br>
 Created (UTC): {invoice.created_at.strftime('%Y-%m-%d %H:%M:%S')}</p>
 <table><thead><tr><th>Product</th><th>Quantity</th><th>Unit price (BDT)</th><th>Total (BDT)</th></tr></thead>

@@ -16,7 +16,7 @@ class CustomerCreate(BaseModel):
 
 
 class CustomerResponse(BaseModel):
-    id: int
+    customer_id: int
     name: str
     phone: str | None
     due: Decimal
@@ -64,7 +64,7 @@ class SaleItemResponse(BaseModel):
 
 class PaymentResponse(UtcResponse):
     model_config = ConfigDict(from_attributes=True)
-    id: int
+    payment_id: int
     invoice_id: int
     user_id: int
     amount: Decimal
@@ -72,7 +72,7 @@ class PaymentResponse(UtcResponse):
 
 
 class SaleResponse(UtcResponse):
-    id: int
+    invoice_id: int
     business_id: int
     business_name: str
     customer_id: int

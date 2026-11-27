@@ -38,9 +38,9 @@ def request_digest(data: PurchaseCreate) -> str:
 
 def purchase_response(db: Session, purchase: Purchase) -> PurchaseResponse:
     lines = db.scalars(select(PurchaseItem).where(
-        PurchaseItem.business_id == purchase.business_id, PurchaseItem.purchase_id == purchase.id
-    ).order_by(PurchaseItem.id)).all()
-    return PurchaseResponse(id=purchase.id, supplier_name=purchase.supplier_name,
+        PurchaseItem.business_id == purchase.business_id, PurchaseItem.purchase_id == purchase.purchase_id
+    ).order_by(PurchaseItem.purchase_item_id)).all()
+    return PurchaseResponse(purchase_id=purchase.purchase_id, supplier_name=purchase.supplier_name,
                             total=purchase.total, user_id=purchase.user_id,
                             created_at=purchase.created_at,
                             items=[PurchaseItemResponse.model_validate(line) for line in lines])
@@ -48,7 +48,7 @@ def purchase_response(db: Session, purchase: Purchase) -> PurchaseResponse:
 
 def create_purchase(db: Session, owner: User, data: PurchaseCreate, key: str) -> tuple[PurchaseResponse, bool]:
     business_id = owner.business_id
-    user_id = owner.id
+    user_id = owner.user_id
     digest = request_digest(data)
     purchase = Purchase(business_id=business_id, user_id=user_id, supplier_name=data.supplier_name,
                         total=sum((line.unit_price * line.quantity for line in data.items), Decimal("0")),
@@ -59,18 +59,18 @@ def create_purchase(db: Session, owner: User, data: PurchaseCreate, key: str) ->
         db.flush()
         for line in sorted(data.items, key=lambda item: item.product_id):
             product = db.scalar(select(Product).where(
-                Product.id == line.product_id, Product.business_id == business_id
+                Product.product_id == line.product_id, Product.business_id == business_id
             ).with_for_update().execution_options(populate_existing=True))
             if product is None:
                 raise PurchaseProductNotFound
             if product.stock_quantity + line.quantity > MAX_STOCK:
                 raise PurchaseStockOverflow
             product.stock_quantity += line.quantity
-            db.add(PurchaseItem(business_id=business_id, purchase_id=purchase.id,
-                                product_id=product.id, quantity=line.quantity, unit_price=line.unit_price))
-            db.add(StockMovement(business_id=business_id, product_id=product.id, user_id=user_id,
-                                 purchase_id=purchase.id, quantity_change=line.quantity,
-                                 movement_type="purchase", reason=f"Purchase #{purchase.id}"))
+            db.add(PurchaseItem(business_id=business_id, purchase_id=purchase.purchase_id,
+                                product_id=product.product_id, quantity=line.quantity, unit_price=line.unit_price))
+            db.add(StockMovement(business_id=business_id, product_id=product.product_id, user_id=user_id,
+                                 purchase_id=purchase.purchase_id, quantity_change=line.quantity,
+                                 movement_type="purchase", reason=f"Purchase #{purchase.purchase_id}"))
         db.commit()
     except IntegrityError:
         db.rollback()

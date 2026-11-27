@@ -55,13 +55,13 @@ def add_purchase(data: PurchaseCreate, response: Response, idempotency_key: UUID
 
 @router.get("", response_model=list[PurchaseResponse])
 def list_purchases(owner: User = Depends(require_owner), db: Session = Depends(get_db)):
-    purchases = db.scalars(select(Purchase).where(Purchase.business_id == owner.business_id).order_by(Purchase.id.desc())).all()
+    purchases = db.scalars(select(Purchase).where(Purchase.business_id == owner.business_id).order_by(Purchase.purchase_id.desc())).all()
     return [purchase_response(db, purchase) for purchase in purchases]
 
 
 @router.get("/{purchase_id}", response_model=PurchaseResponse)
 def get_purchase(purchase_id: int, owner: User = Depends(require_owner), db: Session = Depends(get_db)):
-    purchase = db.scalar(select(Purchase).where(Purchase.id == purchase_id, Purchase.business_id == owner.business_id))
+    purchase = db.scalar(select(Purchase).where(Purchase.purchase_id == purchase_id, Purchase.business_id == owner.business_id))
     if purchase is None:
         raise HTTPException(status_code=404, detail="Purchase not found")
     return purchase_response(db, purchase)

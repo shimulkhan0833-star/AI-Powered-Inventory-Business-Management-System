@@ -37,7 +37,7 @@ def create_session(db: Session, user: User, previous_token: str | None = None) -
     if previous_token:
         db.execute(delete(LoginSession).where(LoginSession.token_hash == token_digest(previous_token)))
     db.add(LoginSession(
-        user_id=user.id,
+        user_id=user.user_id,
         token_hash=token_digest(token),
         expires_at=utc_now() + timedelta(seconds=SESSION_SECONDS),
     ))
@@ -48,7 +48,7 @@ def create_session(db: Session, user: User, previous_token: str | None = None) -
 def user_for_token(db: Session, token: str) -> User | None:
     return db.scalar(
         select(User)
-        .join(LoginSession, LoginSession.user_id == User.id)
+        .join(LoginSession, LoginSession.user_id == User.user_id)
         .where(
             LoginSession.token_hash == token_digest(token),
             LoginSession.expires_at > utc_now(),

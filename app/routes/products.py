@@ -12,7 +12,7 @@ router = APIRouter(prefix="/products", tags=["Products and stock"])
 
 
 def visible_product(product: Product, user: User) -> OwnerProduct | PublicProduct:
-    values = dict(id=product.id, name=product.name, sku=product.sku,
+    values = dict(product_id=product.product_id, name=product.name, sku=product.sku,
                   selling_price=product.selling_price, stock_quantity=product.stock_quantity)
     if user.role == "owner":
         return OwnerProduct(**values, purchase_cost=product.purchase_cost)
@@ -29,7 +29,7 @@ def add_product(data: ProductCreate, owner: User = Depends(require_owner), db: S
 
 @router.get("", response_model=list[OwnerProduct | PublicProduct])
 def list_products(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    products = db.scalars(select(Product).where(Product.business_id == user.business_id).order_by(Product.id)).all()
+    products = db.scalars(select(Product).where(Product.business_id == user.business_id).order_by(Product.product_id)).all()
     return [visible_product(product, user) for product in products]
 
 
@@ -69,7 +69,7 @@ def stock_history(product_id: int, user: User = Depends(get_current_user), db: S
         raise HTTPException(status_code=404, detail="Product not found") from None
     movements = db.scalars(select(StockMovement).where(
         StockMovement.business_id == user.business_id, StockMovement.product_id == product_id
-    ).order_by(StockMovement.id)).all()
+    ).order_by(StockMovement.movement_id)).all()
     model = MovementResponse if user.role == "owner" else PublicMovement
     return [model.model_validate(movement) for movement in movements]
 
@@ -80,4 +80,4 @@ def read_stock(product_id: int, user: User = Depends(get_current_user), db: Sess
         product = get_product(db, user.business_id, product_id)
     except ProductNotFound:
         raise HTTPException(status_code=404, detail="Product not found") from None
-    return {"product_id": product.id, "stock_quantity": product.stock_quantity}
+    return {"product_id": product.product_id, "stock_quantity": product.stock_quantity}

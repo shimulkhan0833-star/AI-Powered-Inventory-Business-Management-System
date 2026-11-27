@@ -39,7 +39,7 @@ class PurchaseItemResponse(BaseModel):
 
 
 class PurchaseResponse(BaseModel):
-    id: int
+    purchase_id: int
     supplier_name: str | None
     total: Decimal
     user_id: int

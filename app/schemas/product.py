@@ -50,7 +50,7 @@ class AdjustmentCreate(BaseModel):
 
 
 class PublicProduct(BaseModel):
-    id: int
+    product_id: int
     name: str
     sku: str
     selling_price: Decimal
@@ -63,7 +63,7 @@ class OwnerProduct(PublicProduct):
 
 class PublicMovement(BaseModel):
     model_config = ConfigDict(from_attributes=True)
-    id: int
+    movement_id: int
     product_id: int
     user_id: int
     quantity_change: int

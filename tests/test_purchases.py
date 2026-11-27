@@ -24,11 +24,11 @@ class PurchaseTests(unittest.TestCase):
                 business = Business(name=business_name)
                 db.add(business)
                 db.flush()
-                db.add(User(business_id=business.id, name="Owner", email=email,
+                db.add(User(business_id=business.business_id, name="Owner", email=email,
                             password_hash=hash_password("owner-password"), role="owner"))
-                db.add(Product(business_id=business.id, name="Rice", sku="RICE", selling_price=50, stock_quantity=0))
+                db.add(Product(business_id=business.business_id, name="Rice", sku="RICE", selling_price=50, stock_quantity=0))
                 if business_name == "Shop A":
-                    db.add(User(business_id=business.id, name="Staff", email="staff@example.com",
+                    db.add(User(business_id=business.business_id, name="Staff", email="staff@example.com",
                                 password_hash=hash_password("staff-password"), role="salesperson"))
             db.commit()
 
@@ -56,7 +56,7 @@ class PurchaseTests(unittest.TestCase):
         self.assertEqual(result.json()["total"], "37.50")
         retry = self.client.post("/purchases", json=self.payload, headers={"Idempotency-Key": key})
         self.assertEqual(retry.status_code, 200)
-        self.assertEqual(retry.json()["id"], result.json()["id"])
+        self.assertEqual(retry.json()["purchase_id"], result.json()["purchase_id"])
         changed = {**self.payload, "items": [{"product_id": 1, "quantity": 4, "unit_price": "12.50"}]}
         self.assertEqual(self.client.post("/purchases", json=changed, headers={"Idempotency-Key": key}).status_code, 409)
         with self.sessions() as db:
@@ -64,7 +64,7 @@ class PurchaseTests(unittest.TestCase):
             self.assertEqual(db.scalar(select(func.count()).select_from(Purchase)), 1)
             movement = db.scalar(select(StockMovement))
             self.assertEqual(movement.quantity_change, 3)
-            self.assertEqual(movement.purchase_id, result.json()["id"])
+            self.assertEqual(movement.purchase_id, result.json()["purchase_id"])
 
     def test_invalid_product_rolls_back_and_tenants_are_isolated(self):
         self.login()
@@ -77,7 +77,7 @@ class PurchaseTests(unittest.TestCase):
         saved = self.client.post("/purchases", json=self.payload, headers={"Idempotency-Key": str(uuid4())}).json()
         self.login("b@example.com", business="Shop B")
         self.assertEqual(self.client.get("/purchases").json(), [])
-        self.assertEqual(self.client.get(f"/purchases/{saved['id']}").status_code, 404)
+        self.assertEqual(self.client.get(f"/purchases/{saved['purchase_id']}").status_code, 404)
 
     def test_salesperson_cannot_access_purchase_or_ai(self):
         self.login("staff@example.com", role="salesperson", password="staff-password")

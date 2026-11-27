@@ -22,13 +22,13 @@ def add_customer(data: CustomerCreate, user: User = Depends(get_current_user), d
 
 @router.get("", response_model=list[CustomerResponse])
 def list_customers(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    customers = db.scalars(select(Customer).where(Customer.business_id == user.business_id).order_by(Customer.id)).all()
+    customers = db.scalars(select(Customer).where(Customer.business_id == user.business_id).order_by(Customer.customer_id)).all()
     return [customer_response(db, customer) for customer in customers]
 
 
 @router.get("/{customer_id}", response_model=CustomerResponse)
 def read_customer(customer_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    customer = db.scalar(select(Customer).where(Customer.id == customer_id, Customer.business_id == user.business_id))
+    customer = db.scalar(select(Customer).where(Customer.customer_id == customer_id, Customer.business_id == user.business_id))
     if customer is None:
         raise HTTPException(status_code=404, detail="Customer not found")
     return customer_response(db, customer)
