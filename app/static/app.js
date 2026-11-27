@@ -5,6 +5,7 @@ const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 const esc = value => String(value ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[c]);
 const money = value => `৳${Number(value || 0).toLocaleString("en-BD", {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
 const reference = (prefix, id) => `${prefix}-${String(id).padStart(5, "0")}`;
+const purchaseDateTime = value => value ? String(value).replace("T", " ").slice(0, 19) : "—";
 function movementReason(movement) {
   const reason = movement.reason || "";
   if (movement.movement_type === "purchase") return reason.replace(/^Purchase #(\d+)$/, (_, id) => `Purchase ${reference("PUR", id)}`);
@@ -87,7 +88,7 @@ function renderPage() {
     html = `<div class="card"><div class="card-head"><div><h3>Product catalogue</h3><p>${state.products.length} products in your business</p></div></div><div class="toolbar"><input id="product-search" type="search" placeholder="Search by name or SKU" aria-label="Search products"></div><div id="product-table">${table(["Product","Selling price",...(owner?["Purchase cost"]:[]),"Available",""],productRows,"No products yet.")}</div></div>`;
   } else if (state.page === "purchases") {
     pageHeader("STOCK COMING IN", "Purchases", "Record what arrives from your suppliers.", button("Scan memo", "memo") + button("+ New purchase", "new-purchase", true));
-    const rows = state.purchases.map(p => `<tr><td><strong>${reference("PUR", p.purchase_id)}</strong><small>${esc((p.created_at || "").slice(0,10))}</small></td><td>${esc(p.supplier_name || "Not specified")}</td><td>${p.items.length} item(s)</td><td>${money(p.total)}</td></tr>`);
+    const rows = state.purchases.map(p => `<tr><td><strong>${reference("PUR", p.purchase_id)}</strong><small>${esc(purchaseDateTime(p.created_at))}</small></td><td>${esc(p.supplier_name || "Not specified")}</td><td>${p.items.length} item(s)</td><td>${money(p.total)}</td></tr>`);
     html = `<div class="card"><div class="card-head"><div><h3>Purchase history</h3><p>Every saved purchase adds to stock.</p></div></div>${table(["Purchase","Supplier","Items","Total"],rows,"No purchases yet. Add one manually or scan a memo.")}</div>`;
   } else if (state.page === "sales") {
     pageHeader("YOUR TRANSACTIONS", "Sales", "Create invoices and keep track of payments.", button("+ New sale", "new-sale", true));
