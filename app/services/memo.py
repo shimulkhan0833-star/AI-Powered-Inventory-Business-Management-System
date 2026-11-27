@@ -1,6 +1,7 @@
 """Read-only Gemini memo extraction. No business records are saved here."""
 
 import base64
+import logging
 import os
 import re
 
@@ -8,6 +9,8 @@ import httpx
 from pydantic import ValidationError
 
 from app.schemas.purchase import MemoDraft
+
+logger = logging.getLogger("uvicorn.error")
 
 PROMPT = (
     "Extract the supplier name and purchase line items from this memo image. "
@@ -25,7 +28,11 @@ class MemoUnavailable(Exception):
 def extract_memo(image: bytes, content_type: str) -> MemoDraft:
     key = os.getenv("GOOGLE_API_KEY")
     model = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
-    if not key or not re.fullmatch(r"[A-Za-z0-9._-]+", model):
+    if not key:
+        logger.warning("Memo extraction failed: missing Google API key")
+        raise MemoUnavailable
+    if not re.fullmatch(r"[A-Za-z0-9._-]+", model):
+        logger.warning("Memo extraction failed: invalid model configuration")
         raise MemoUnavailable
     schema = {
         "type": "object", "properties": {
@@ -50,5 +57,18 @@ def extract_memo(image: bytes, content_type: str) -> MemoDraft:
         draft = MemoDraft.model_validate_json(text)
         draft.note = "AI draft only. Review every field and select matching products before saving."
         return draft
-    except (httpx.HTTPError, ValueError, KeyError, IndexError, TypeError, ValidationError) as exc:
+    except httpx.TimeoutException as exc:
+        logger.warning("Memo extraction failed: Google request timed out")
+        raise MemoUnavailable from exc
+    except httpx.HTTPStatusError as exc:
+        logger.warning("Memo extraction failed: Google returned HTTP %s", exc.response.status_code)
+        raise MemoUnavailable from exc
+    except httpx.RequestError as exc:
+        logger.warning("Memo extraction failed: connection to Google failed")
+        raise MemoUnavailable from exc
+    except httpx.HTTPError as exc:
+        logger.warning("Memo extraction failed: Google request error")
+        raise MemoUnavailable from exc
+    except (ValueError, KeyError, IndexError, TypeError, ValidationError) as exc:
+        logger.warning("Memo extraction failed: invalid or incomplete Google response")
         raise MemoUnavailable from exc

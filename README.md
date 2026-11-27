@@ -144,6 +144,12 @@ The default model is configurable because availability and pricing can vary.
 AI output is not validated for accuracy. See [Google's structured-output documentation](https://ai.google.dev/gemini-api/docs/structured-output)
 for the API format.
 
+If a memo scan returns 503, check the server terminal for a warning beginning
+`Memo extraction failed:`. It identifies a timeout, connection problem, Google
+HTTP status, invalid response, or missing configuration. The warning excludes
+API keys and memo contents. The public API still returns a generic message and
+manual purchase entry remains available.
+
 ## Customers, sales, and invoices
 
 Both owners and salespeople can create customers with `POST /customers` and
