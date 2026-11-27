@@ -25,7 +25,7 @@ migrations and start the app:
 
 ```powershell
 python -m alembic upgrade head
-python -m uvicorn app.main:app --reload
+python main.py
 ```
 
 Alembic tracks schema changes in the database. Review generated migration files
@@ -38,6 +38,7 @@ The health endpoint checks the application process only; it does not check a dat
 ## Project layout
 
 ```text
+main.py               # Local development server with automatic reload
 app/
   main.py             # FastAPI app and router registration
   database.py         # SQLAlchemy engine and request sessions
