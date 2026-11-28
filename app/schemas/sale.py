@@ -66,6 +66,7 @@ class PaymentResponse(UtcResponse):
     model_config = ConfigDict(from_attributes=True)
     payment_id: int
     invoice_id: int
+    customer_payment_id: int | None = None
     user_id: int
     amount: Decimal
     created_at: datetime
@@ -93,3 +94,8 @@ class SaleResponse(UtcResponse):
     due: Decimal
     items: list[SaleItemResponse]
     payments: list[PaymentResponse]
+
+
+class CustomerHistoryResponse(BaseModel):
+    customer: CustomerResponse
+    sales: list[SaleResponse]

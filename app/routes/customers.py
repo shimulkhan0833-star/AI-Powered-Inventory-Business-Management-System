@@ -6,9 +6,9 @@ from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_current_user
 from app.database import get_db
-from app.models import Customer, User
-from app.schemas.sale import CustomerCreate, CustomerPaymentResponse, CustomerResponse, PaymentCreate
-from app.services.sales import IdempotencyConflict, InvalidAmount, NotFound, customer_response, record_customer_payment
+from app.models import Customer, SalesInvoice, User
+from app.schemas.sale import CustomerCreate, CustomerHistoryResponse, CustomerPaymentResponse, CustomerResponse, PaymentCreate
+from app.services.sales import IdempotencyConflict, InvalidAmount, NotFound, customer_response, invoice_response, record_customer_payment
 
 router = APIRouter(prefix="/customers", tags=["Customers and dues"])
 
@@ -34,6 +34,18 @@ def read_customer(customer_id: int, user: User = Depends(get_current_user), db: 
     if customer is None:
         raise HTTPException(status_code=404, detail="Customer not found")
     return customer_response(db, customer)
+
+
+@router.get("/{customer_id}/history", response_model=CustomerHistoryResponse)
+def customer_history(customer_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    customer = db.scalar(select(Customer).where(Customer.customer_id == customer_id, Customer.business_id == user.business_id))
+    if customer is None:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    invoices = db.scalars(select(SalesInvoice).where(
+        SalesInvoice.business_id == user.business_id, SalesInvoice.customer_id == customer_id
+    ).order_by(SalesInvoice.created_at.desc(), SalesInvoice.invoice_id.desc())).all()
+    return CustomerHistoryResponse(customer=customer_response(db, customer),
+                                   sales=[invoice_response(db, invoice) for invoice in invoices])
 
 
 @router.post("/{customer_id}/payments", response_model=CustomerPaymentResponse, status_code=201)

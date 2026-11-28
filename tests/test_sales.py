@@ -154,6 +154,30 @@ class SalesTests(unittest.TestCase):
             self.assertEqual(db.scalar(select(func.count()).select_from(CustomerPayment)), 0)
             self.assertEqual(db.scalar(select(func.count()).select_from(Payment)), 1)
 
+    def test_customer_history_includes_sales_and_grouped_payment_references(self):
+        self.login()
+        empty = self.client.get("/customers/1/history")
+        self.assertEqual(empty.status_code, 200)
+        self.assertEqual(empty.json()["sales"], [])
+        first = self.client.post("/sales", json={**self.payload, "items": [{"product_id": 1, "quantity": 1}], "initial_payment": "100"}, headers={"Idempotency-Key": str(uuid4())}).json()
+        second = self.client.post("/sales", json={**self.payload, "items": [{"product_id": 1, "quantity": 1}], "initial_payment": "0"}, headers={"Idempotency-Key": str(uuid4())}).json()
+        batch = self.client.post("/customers/1/payments", json={"amount": "600"}, headers={"Idempotency-Key": str(uuid4())}).json()
+        history = self.client.get("/customers/1/history").json()
+        self.assertEqual(history["customer"]["due"], "300.00")
+        sales = {sale["invoice_id"]: sale for sale in history["sales"]}
+        self.assertEqual(set(sales), {first["invoice_id"], second["invoice_id"]})
+        self.assertEqual(sales[first["invoice_id"]]["due"], "0.00")
+        self.assertEqual(sales[second["invoice_id"]]["due"], "300.00")
+        payments = [payment for sale in sales.values() for payment in sale["payments"]]
+        self.assertEqual(len(payments), 3)
+        grouped = [payment for payment in payments if payment["customer_payment_id"] == batch["customer_payment_id"]]
+        self.assertEqual({payment["invoice_id"] for payment in grouped}, set(sales))
+        self.assertEqual(sum(Decimal(payment["amount"]) for payment in grouped), Decimal("600.00"))
+        self.assertTrue(all(payment["created_at"].endswith("Z") for payment in payments))
+        self.login("b@example.com", role="owner", business="Shop B")
+        self.assertEqual(self.client.get("/customers/1/history").status_code, 404)
+        self.assertEqual(self.client.get("/customers/2/history").json()["sales"], [])
+
 
 if __name__ == "__main__":
     unittest.main()
