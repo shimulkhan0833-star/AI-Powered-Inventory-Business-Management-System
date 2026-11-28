@@ -71,6 +71,14 @@ class PaymentResponse(UtcResponse):
     created_at: datetime
 
 
+class CustomerPaymentResponse(UtcResponse):
+    customer_payment_id: int
+    customer_id: int
+    amount: Decimal
+    created_at: datetime
+    allocations: list[PaymentResponse]
+
+
 class SaleResponse(UtcResponse):
     invoice_id: int
     business_id: int

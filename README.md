@@ -190,6 +190,12 @@ rejected. `GET /sales/{invoice_id}` returns the invoice and current paid/due amo
 `GET /sales/{invoice_id}/print` shows a printable invoice in the browser. Both roles
 can access their business's invoices; purchase costs are never included.
 
+In Customers & dues, a customer can make one payment against their total due.
+`POST /customers/{customer_id}/payments` accepts the same amount and UUID
+`Idempotency-Key` format. The server applies the payment to the oldest unpaid
+invoices first and saves all allocations in one transaction. Retries with the
+same key return the original payment; amounts above the customer's due are rejected.
+
 Invoice and payment timestamps are stored as UTC and returned with a `Z`
 suffix. Older product and purchase timestamps use the database's local clock
 and have not yet been migrated to UTC. Returns, discounts, payment reversals,

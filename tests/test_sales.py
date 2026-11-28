@@ -1,6 +1,8 @@
 import unittest
+from datetime import datetime
 from decimal import Decimal
 from uuid import uuid4
+from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, func, select
@@ -10,7 +12,7 @@ from sqlalchemy.pool import StaticPool
 from app.core.security import hash_password
 from app.database import Base, get_db
 from app.main import app
-from app.models import Business, Customer, Payment, Product, SalesInvoice, StockMovement, User
+from app.models import Business, Customer, CustomerPayment, Payment, Product, SalesInvoice, StockMovement, User
 
 
 class SalesTests(unittest.TestCase):
@@ -117,6 +119,40 @@ class SalesTests(unittest.TestCase):
         self.assertEqual(self.client.get(f"/sales/{invoice['invoice_id']}").status_code, 404)
         self.assertEqual(self.client.post(f"/sales/{invoice['invoice_id']}/payments", json={"amount": "1"}, headers={"Idempotency-Key": str(uuid4())}).status_code, 404)
         self.assertEqual(self.client.get("/customers/1").status_code, 404)
+
+    def test_customer_payment_allocates_oldest_invoices_and_retries(self):
+        self.login()
+        first = self.client.post("/sales", json={**self.payload, "items": [{"product_id": 1, "quantity": 1}], "initial_payment": "100"}, headers={"Idempotency-Key": str(uuid4())}).json()
+        second = self.client.post("/sales", json={**self.payload, "items": [{"product_id": 1, "quantity": 1}], "initial_payment": "0"}, headers={"Idempotency-Key": str(uuid4())}).json()
+        path = "/customers/1/payments"
+        key = str(uuid4())
+        response = self.client.post(path, json={"amount": "600"}, headers={"Idempotency-Key": key})
+        self.assertEqual(response.status_code, 201, response.text)
+        allocations = response.json()["allocations"]
+        self.assertEqual([(p["invoice_id"], p["amount"]) for p in allocations], [(first["invoice_id"], "400.00"), (second["invoice_id"], "200.00")])
+        self.assertEqual(self.client.get("/customers/1").json()["due"], "300.00")
+        self.assertEqual(self.client.get(f"/sales/{first['invoice_id']}").json()["due"], "0.00")
+        self.assertEqual(self.client.get(f"/sales/{second['invoice_id']}").json()["due"], "300.00")
+        retry = self.client.post(path, json={"amount": "600"}, headers={"Idempotency-Key": key})
+        self.assertEqual(retry.status_code, 200)
+        self.assertEqual(retry.json(), response.json())
+        self.assertEqual(self.client.post(path, json={"amount": "601"}, headers={"Idempotency-Key": key}).status_code, 409)
+        self.assertEqual(self.client.post(path, json={"amount": "301"}, headers={"Idempotency-Key": str(uuid4())}).status_code, 409)
+        self.assertEqual(self.client.post(path, json={"amount": "0"}, headers={"Idempotency-Key": str(uuid4())}).status_code, 422)
+        self.assertEqual(self.client.get("/customers/1").json()["due"], "300.00")
+        self.login("b@example.com", role="owner", business="Shop B")
+        self.assertEqual(self.client.post(path, json={"amount": "1"}, headers={"Idempotency-Key": str(uuid4())}).status_code, 404)
+
+    def test_customer_payment_rolls_back_all_allocations_on_failure(self):
+        self.login()
+        self.client.post("/sales", json=self.payload, headers={"Idempotency-Key": str(uuid4())})
+        with patch("app.services.sales.utc_now", side_effect=[datetime.now(), RuntimeError("test failure")]):
+            with self.assertRaises(RuntimeError):
+                self.client.post("/customers/1/payments", json={"amount": "200"}, headers={"Idempotency-Key": str(uuid4())})
+        self.assertEqual(self.client.get("/customers/1").json()["due"], "600.00")
+        with self.sessions() as db:
+            self.assertEqual(db.scalar(select(func.count()).select_from(CustomerPayment)), 0)
+            self.assertEqual(db.scalar(select(func.count()).select_from(Payment)), 1)
 
 
 if __name__ == "__main__":

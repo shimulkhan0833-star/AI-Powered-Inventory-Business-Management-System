@@ -54,6 +54,7 @@ class Payment(Base):
     __tablename__ = "payments"
     __table_args__ = (
         ForeignKeyConstraint(["business_id", "invoice_id"], ["sales_invoices.business_id", "sales_invoices.invoice_id"]),
+        ForeignKeyConstraint(["business_id", "customer_payment_id"], ["customer_payments.business_id", "customer_payments.customer_payment_id"], name="fk_payments_customer_payment"),
         UniqueConstraint("business_id", "idempotency_key", name="uq_payments_business_key"),
         Index("ix_payments_business_invoice", "business_id", "invoice_id"),
     )
@@ -61,7 +62,24 @@ class Payment(Base):
     payment_id: Mapped[int] = mapped_column(primary_key=True)
     business_id: Mapped[int] = mapped_column(nullable=False)
     invoice_id: Mapped[int] = mapped_column(nullable=False)
+    customer_payment_id: Mapped[int | None] = mapped_column(nullable=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.user_id"), nullable=False)
     amount: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
     idempotency_key: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+
+
+class CustomerPayment(Base):
+    __tablename__ = "customer_payments"
+    __table_args__ = (
+        ForeignKeyConstraint(["business_id", "customer_id"], ["customers.business_id", "customers.customer_id"]),
+        UniqueConstraint("business_id", "customer_payment_id", name="uq_customer_payments_business_id"),
+        UniqueConstraint("business_id", "idempotency_key", name="uq_customer_payments_business_key"),
+    )
+    customer_payment_id: Mapped[int] = mapped_column(primary_key=True)
+    business_id: Mapped[int] = mapped_column(nullable=False)
+    customer_id: Mapped[int] = mapped_column(nullable=False)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.user_id"), nullable=False)
+    amount: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(36), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)

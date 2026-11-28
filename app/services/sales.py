@@ -8,8 +8,8 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.models import Business, Customer, Payment, Product, SalesInvoice, SalesInvoiceItem, StockMovement, User
-from app.schemas.sale import CustomerResponse, PaymentResponse, SaleCreate, SaleItemResponse, SaleResponse
+from app.models import Business, Customer, CustomerPayment, Payment, Product, SalesInvoice, SalesInvoiceItem, StockMovement, User
+from app.schemas.sale import CustomerPaymentResponse, CustomerResponse, PaymentResponse, SaleCreate, SaleItemResponse, SaleResponse
 from app.services.sessions import utc_now
 
 
@@ -155,3 +155,63 @@ def record_payment(db: Session, user: User, invoice_id: int, amount: Decimal, ke
         raise
     db.refresh(payment)
     return PaymentResponse.model_validate(payment), True
+
+
+def customer_payment_response(db: Session, batch: CustomerPayment) -> CustomerPaymentResponse:
+    allocations = db.scalars(select(Payment).where(Payment.business_id == batch.business_id,
+        Payment.customer_payment_id == batch.customer_payment_id).order_by(Payment.payment_id)).all()
+    return CustomerPaymentResponse(customer_payment_id=batch.customer_payment_id, customer_id=batch.customer_id,
+        amount=batch.amount, created_at=batch.created_at,
+        allocations=[PaymentResponse.model_validate(payment) for payment in allocations])
+
+
+def record_customer_payment(db: Session, user: User, customer_id: int, amount: Decimal, key: str) -> tuple[CustomerPaymentResponse, bool]:
+    business_id, user_id = user.business_id, user.user_id
+
+    def previous():
+        return db.scalar(select(CustomerPayment).where(CustomerPayment.business_id == business_id,
+            CustomerPayment.idempotency_key == key))
+
+    def replay(batch):
+        if batch.customer_id != customer_id or batch.amount != amount:
+            raise IdempotencyConflict
+        return customer_payment_response(db, batch), False
+
+    try:
+        customer = db.scalar(select(Customer).where(Customer.business_id == business_id, Customer.customer_id == customer_id))
+        if customer is None:
+            raise NotFound
+        existing = previous()
+        if existing is not None:
+            return replay(existing)
+        batch = CustomerPayment(business_id=business_id, customer_id=customer_id, user_id=user_id,
+                                amount=amount, idempotency_key=key, created_at=utc_now())
+        db.add(batch)
+        db.flush()
+        invoices = db.scalars(select(SalesInvoice).where(
+            SalesInvoice.business_id == business_id, SalesInvoice.customer_id == customer_id,
+            SalesInvoice.paid_amount < SalesInvoice.total,
+        ).order_by(SalesInvoice.created_at, SalesInvoice.invoice_id).with_for_update().execution_options(populate_existing=True)).all()
+        if amount > sum((invoice.total - invoice.paid_amount for invoice in invoices), Decimal("0")):
+            raise InvalidAmount
+        remaining = amount
+        for invoice in invoices:
+            if remaining <= 0:
+                break
+            allocated = min(remaining, invoice.total - invoice.paid_amount)
+            invoice.paid_amount += allocated
+            db.add(Payment(business_id=business_id, invoice_id=invoice.invoice_id, user_id=user_id,
+                           customer_payment_id=batch.customer_payment_id, amount=allocated, created_at=utc_now()))
+            remaining -= allocated
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        existing = previous()
+        if existing is None:
+            raise
+        return replay(existing)
+    except Exception:
+        db.rollback()
+        raise
+    db.refresh(batch)
+    return customer_payment_response(db, batch), True

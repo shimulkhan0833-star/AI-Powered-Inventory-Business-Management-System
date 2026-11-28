@@ -11,9 +11,9 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app.database import get_engine
-from app.models import Business, Customer, Payment, Product, SalesInvoice, SalesInvoiceItem, StockMovement, User
+from app.models import Business, Customer, CustomerPayment, Payment, Product, SalesInvoice, SalesInvoiceItem, StockMovement, User
 from app.schemas.sale import SaleCreate
-from app.services.sales import InsufficientStock, InvalidAmount, create_sale, record_payment
+from app.services.sales import InsufficientStock, InvalidAmount, create_sale, record_customer_payment, record_payment
 
 
 @unittest.skipUnless(os.getenv("RUN_MYSQL_CONCURRENCY") == "1", "Requires explicit MySQL integration opt-in")
@@ -77,6 +77,40 @@ class MySQLSalesConcurrencyTests(unittest.TestCase):
             self.assertCountEqual(outcomes, ["saved", "exceeds due"])
             with Session(engine) as db:
                 self.assertEqual(db.get(SalesInvoice, invoice_id).paid_amount, Decimal("7.00"))
+
+            barrier = threading.Barrier(2)
+
+            def pay_customer_two():
+                with Session(engine) as db:
+                    user = db.get(User, user_id)
+                    barrier.wait(timeout=10)
+                    try:
+                        record_customer_payment(db, user, customer_id, Decimal("2.00"), str(uuid4()))
+                        return "saved"
+                    except InvalidAmount:
+                        return "exceeds due"
+
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                outcomes = list(executor.map(lambda _: pay_customer_two(), range(2)))
+            self.assertCountEqual(outcomes, ["saved", "exceeds due"])
+            with Session(engine) as db:
+                self.assertEqual(db.get(SalesInvoice, invoice_id).paid_amount, Decimal("9.00"))
+
+            barrier = threading.Barrier(2)
+            retry_key = str(uuid4())
+
+            def retry_same_customer_payment():
+                with Session(engine) as db:
+                    user = db.get(User, user_id)
+                    barrier.wait(timeout=10)
+                    _, created = record_customer_payment(db, user, customer_id, Decimal("1.00"), retry_key)
+                    return created
+
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                outcomes = list(executor.map(lambda _: retry_same_customer_payment(), range(2)))
+            self.assertCountEqual(outcomes, [True, False])
+            with Session(engine) as db:
+                self.assertEqual(db.get(SalesInvoice, invoice_id).paid_amount, Decimal("10.00"))
         finally:
             if business_id is not None:
                 with Session(engine) as db:
@@ -85,7 +119,7 @@ class MySQLSalesConcurrencyTests(unittest.TestCase):
                         Business.business_id == business_id, Business.name == f"Concurrency test {marker}"
                     ))
                     if fixture is not None:
-                        for model in (StockMovement, Payment, SalesInvoiceItem, SalesInvoice, Product, Customer, User):
+                        for model in (StockMovement, Payment, CustomerPayment, SalesInvoiceItem, SalesInvoice, Product, Customer, User):
                             db.execute(delete(model).where(model.business_id == business_id))
                         db.execute(delete(Business).where(Business.business_id == business_id, Business.name == f"Concurrency test {marker}"))
                         db.commit()
