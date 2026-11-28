@@ -196,9 +196,10 @@ In Customers & dues, a customer can make one payment against their total due.
 invoices first and saves all allocations in one transaction. Retries with the
 same key return the original payment; amounts above the customer's due are rejected.
 
-The customer history view shows all sales, current invoice balances, and payments,
-including initial payments and payments split across invoices. Both roles can
-read this history for their own business at `GET /customers/{customer_id}/history`.
+The customer history view shows all sales and current invoice balances, plus
+payments made against the customer's total due. Payments covering multiple invoices
+appear once. Both roles can read the underlying invoice history for their own
+business at `GET /customers/{customer_id}/history`.
 
 Invoice and payment timestamps are stored as UTC and returned with a `Z`
 suffix. Older product and purchase timestamps use the database's local clock

@@ -202,13 +202,14 @@ function showCustomerHistory(history) {
   const saleRows = sales.map(s => `<tr><td>${esc(historyDateTime(s.created_at))}</td><td><a href="/sales/${s.invoice_id}/print" target="_blank" rel="noopener">${reference("INV", s.invoice_id)}</a></td><td>${money(s.total)}</td><td>${money(s.paid)}</td><td>${money(s.due)}</td></tr>`);
   const grouped = new Map();
   for (const sale of sales) for (const payment of sale.payments) {
-    const key = payment.customer_payment_id == null ? `payment-${payment.payment_id}` : `customer-${payment.customer_payment_id}`;
-    if (!grouped.has(key)) grouped.set(key, {date:payment.created_at, cents:0, invoices:[]});
-    const entry = grouped.get(key); entry.cents += Math.round(Number(payment.amount) * 100); entry.invoices.push(reference("INV", sale.invoice_id));
+    if (payment.customer_payment_id == null) continue;
+    const key = payment.customer_payment_id;
+    if (!grouped.has(key)) grouped.set(key, {date:payment.created_at, cents:0});
+    grouped.get(key).cents += Math.round(Number(payment.amount) * 100);
   }
   const payments = [...grouped.values()].sort((a, b) => String(b.date).localeCompare(String(a.date)));
-  const paymentRows = payments.map(payment => `<tr><td>${esc(historyDateTime(payment.date))}</td><td>${esc(payment.invoices.join(", "))}</td><td>${money(payment.cents / 100)}</td></tr>`);
-  openModal(`${customer.name} · history`, `<div class="customer-history-summary"><div><small>Phone</small><strong>${esc(customer.phone || "Not specified")}</strong></div><div><small>Current total due</small><strong>${money(customer.due)}</strong></div></div><h3>Sales history</h3>${table(["Date & time", "Invoice", "Total", "Paid", "Current due"], saleRows, "No sales recorded for this customer.")}<h3 class="customer-history-payments">Payment history</h3><p class="muted customer-history-note">Includes amounts paid at sale and later payments. A payment covering multiple invoices appears once.</p>${table(["Date & time", "Applied to invoices", "Amount paid"], paymentRows, "No payments recorded for this customer.")}<p class="muted customer-history-note">Dates and times are shown in your device’s time zone.</p><div class="modal-actions"><button type="button" class="btn" data-action="close">Close</button></div>`, "CUSTOMER DUES");
+  const paymentRows = payments.map(payment => `<tr><td>${esc(historyDateTime(payment.date))}</td><td>${money(payment.cents / 100)}</td></tr>`);
+  openModal(`${customer.name} · history`, `<div class="customer-history-summary"><div><small>Phone</small><strong>${esc(customer.phone || "Not specified")}</strong></div><div><small>Total due</small><strong>${money(customer.due)}</strong></div></div><h3>Sales history</h3>${table(["Date & time", "Invoice", "Total", "Paid", "Due"], saleRows, "No sales recorded for this customer.")}<h3 class="customer-history-payments">Payment history</h3><p class="muted customer-history-note">Payments made against the customer's total due.</p>${table(["Date & time", "Amount paid"], paymentRows, "No payments against total due recorded for this customer.")}<p class="muted customer-history-note">Dates and times are shown in your device’s time zone.</p><div class="modal-actions"><button type="button" class="btn" data-action="close">Close</button></div>`, "CUSTOMER DUES");
   modal.classList.add("customer-history-modal");
 }
 function saleForm() {
