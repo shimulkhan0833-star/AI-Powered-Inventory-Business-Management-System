@@ -183,8 +183,8 @@ function purchaseForm(draft = null, memoFile = null) {
   }
 }
 function saleForm() {
-  if (!state.products.length || !state.customers.length) { notify("Add at least one product and customer before making a sale.", true); return; }
-  openModal("New sale", `<div class="sale-layout"><section class="sale-catalog"><div class="sale-section-head"><div><h3>Choose products</h3><p>Select items to add to the sale.</p></div></div><input id="sale-product-search" type="search" placeholder="Search products or SKU" aria-label="Search products"><div class="sale-product-grid">${state.products.map(saleProductCard).join("")}</div></section><form id="sale-form" class="sale-cart"><label>Customer<select name="customer_id" required>${customerOptions()}</select></label><div class="sale-cart-heading"><h3>Sale items</h3><p>Adjust quantities before saving.</p></div><div id="sale-lines"></div><p id="sale-empty" class="sale-empty">Select a product to add it here.</p><div class="sale-summary"><div><span>Total</span><strong id="sale-total">${money(0)}</strong></div><div><span>Paid</span><strong id="sale-paid">${money(0)}</strong></div><div class="sale-due"><span>Due</span><strong id="sale-due">${money(0)}</strong></div></div><label>Amount paid now ৳<input name="initial_payment" type="number" min="0" max="0" step="0.01" value="0" required></label><p class="sale-note">Prices and stock are confirmed when the invoice is saved.</p>${actions("Save invoice")}</form></div>`, "SALES");
+  if (!state.products.length) { notify("Add at least one product before making a sale.", true); return; }
+  openModal("New sale", `<div class="sale-layout"><section class="sale-catalog"><div class="sale-section-head"><div><h3>Choose products</h3><p>Select items to add to the sale.</p></div></div><input id="sale-product-search" type="search" placeholder="Search products or SKU" aria-label="Search products"><div class="sale-product-grid">${state.products.map(saleProductCard).join("")}</div></section><form id="sale-form" class="sale-cart"><label>Customer<select name="customer_id" required>${customerOptions()}</select></label><button type="button" class="text-button sale-customer-toggle" data-action="toggle-sale-customer" aria-expanded="false" aria-controls="sale-new-customer">+ Add customer</button><div id="sale-new-customer" class="sale-new-customer" hidden><label>Customer name<input id="sale-customer-name" maxlength="150" autocomplete="name"></label><label>Phone <small>Optional</small><input id="sale-customer-phone" type="tel" maxlength="40" autocomplete="tel"></label><button type="button" class="btn small" data-action="save-sale-customer">Add and select customer</button></div><div class="sale-cart-heading"><h3>Sale items</h3><p>Adjust quantities before saving.</p></div><div id="sale-lines"></div><p id="sale-empty" class="sale-empty">Select a product to add it here.</p><div class="sale-summary"><div><span>Total</span><strong id="sale-total">${money(0)}</strong></div><div><span>Paid</span><strong id="sale-paid">${money(0)}</strong></div><div class="sale-due"><span>Due</span><strong id="sale-due">${money(0)}</strong></div></div><label>Amount paid now ৳<input name="initial_payment" type="number" min="0" max="0" step="0.01" value="0" required></label><p class="sale-note">Prices and stock are confirmed when the invoice is saved.</p>${actions("Save invoice")}</form></div>`, "SALES");
   modal.classList.add("sale-modal");
 }
 function pendingKey(type, body) {
@@ -261,6 +261,29 @@ document.addEventListener("click", async event => {
     else if (action === "deactivate") { if (confirm("Deactivate this salesperson’s access?")) { await api(`/employees/${id}/deactivate`, {method:"PATCH"}); notify("Salesperson deactivated."); await navigate("employees"); } }
     else if (action === "new-purchase") purchaseForm();
     else if (action === "new-sale") saleForm();
+    else if (action === "toggle-sale-customer") {
+      const panel = $("#sale-new-customer"); panel.hidden = !panel.hidden;
+      target.setAttribute("aria-expanded", String(!panel.hidden));
+      if (!panel.hidden) $("#sale-customer-name").focus();
+    }
+    else if (action === "save-sale-customer") {
+      const form = target.closest("#sale-form");
+      const name = $("#sale-customer-name", form).value.trim();
+      const phone = $("#sale-customer-phone", form).value.trim();
+      if (!name) { notify("Enter the customer's name.", true); $("#sale-customer-name", form).focus(); return; }
+      target.disabled = true;
+      try {
+        const customer = await api("/customers", {method:"POST", json:{name, phone:phone || null}});
+        state.customers.push(customer);
+        if (form.isConnected) {
+          const select = $("[name=customer_id]", form); const option = document.createElement("option");
+          option.value = customer.customer_id; option.textContent = customer.name; select.append(option); select.value = String(customer.customer_id);
+          $("#sale-customer-name", form).value = ""; $("#sale-customer-phone", form).value = "";
+          $("#sale-new-customer", form).hidden = true; $("[data-action=toggle-sale-customer]", form).setAttribute("aria-expanded", "false");
+          notify("Customer added and selected.");
+        }
+      } finally { target.disabled = false; }
+    }
     else if (action === "add-purchase-line") $("#purchase-lines").insertAdjacentHTML("beforeend", purchaseRow());
     else if (action === "add-sale-product") addSaleProduct(id);
     else if (action === "remove-sale-line") { target.closest(".sale-cart-line").remove(); updateSaleTotals(); }
@@ -279,6 +302,11 @@ document.addEventListener("input", event => {
   if (event.target.id !== "product-search") return;
   const query = event.target.value.toLowerCase().trim();
   $$("#product-table tbody tr").forEach(row => {row.hidden = !row.textContent.toLowerCase().includes(query);});
+});
+document.addEventListener("keydown", event => {
+  if (event.key === "Enter" && event.target.closest("#sale-new-customer")) {
+    event.preventDefault(); $("[data-action=save-sale-customer]", event.target.closest("#sale-form")).click();
+  }
 });
 $("#modal-close").addEventListener("click", closeModal);
 for (const button of [$("#logout"), $("#logout-top")]) button.addEventListener("click", async () => { try { await api("/auth/logout",{method:"POST"}); state.user = null; showAuth(); } catch (error) { notify(error.message,true); } });
