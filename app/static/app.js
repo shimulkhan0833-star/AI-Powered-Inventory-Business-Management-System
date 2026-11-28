@@ -15,6 +15,14 @@ function movementReason(movement) {
 const state = {user:null, page:"dashboard", products:[], customers:[], sales:[], purchases:[], employees:[]};
 const modal = $("#modal");
 let toastTimer;
+let memoPreviewUrl = null;
+
+function clearMemoPreview() {
+  if (memoPreviewUrl) URL.revokeObjectURL(memoPreviewUrl);
+  memoPreviewUrl = null;
+  modal.classList.remove("memo-review-modal");
+}
+modal.addEventListener("close", clearMemoPreview);
 
 function notify(message, error = false) {
   const el = $("#notice"); el.textContent = message; el.classList.toggle("error", error); el.hidden = false;
@@ -34,6 +42,7 @@ async function api(path, options = {}) {
 }
 function formObject(form) { return Object.fromEntries(new FormData(form).entries()); }
 function openModal(title, body, eyebrow = "OLEYN STOCK") {
+  clearMemoPreview();
   $("#modal-title").textContent = title; $("#modal-eyebrow").textContent = eyebrow;
   $("#modal-body").innerHTML = body; if (!modal.open) modal.showModal();
 }
@@ -120,10 +129,17 @@ function productForm(product = null) {
   const p = product || {}; const edit = !!product;
   openModal(edit ? "Edit product" : "Add a product", `<p class="muted">${edit ? "Update your product details." : "Start with the basics. You can adjust stock later."}</p><form id="product-form" data-id="${p.product_id || ""}" class="form-stack"><div class="form-grid"><label class="full">Product name<input name="name" value="${esc(p.name || "")}" maxlength="150" required></label><label>SKU <small>Leave blank to generate</small><input name="sku" value="${esc(p.sku || "")}" maxlength="64"></label><label>Selling price ৳<input name="selling_price" type="number" min="0" step="0.01" value="${esc(p.selling_price || "")}" required></label><label>Purchase cost ৳ <small>Only visible to owners</small><input name="purchase_cost" type="number" min="0" step="0.01" value="${esc(p.purchase_cost ?? "")}"></label>${edit ? "" : `<label>Opening stock<input name="opening_stock" type="number" min="0" step="1" value="0" required></label>`}</div>${actions(edit ? "Save changes" : "Add product")}</form>`, "PRODUCTS & STOCK");
 }
-function purchaseForm(draft = null) {
+function purchaseForm(draft = null, memoFile = null) {
   if (!state.products.length) { notify("Add a product before recording a purchase.", true); return; }
   const rows = draft?.items?.length ? draft.items.map(purchaseRow).join("") : purchaseRow();
-  openModal("New purchase", `${draft ? `<p class="info warning">Review every extracted field and select the matching product. Nothing has been saved yet.</p>` : `<p class="muted">Record the items you received. Stock updates when you save.</p>`}<form id="purchase-form" class="form-stack"><label>Supplier name <small>Optional</small><input name="supplier_name" maxlength="150" value="${esc(draft?.supplier_name || "")}"></label><div><label>Purchase items</label><div id="purchase-lines">${rows}</div><button type="button" class="text-button" data-action="add-purchase-line">+ Add another item</button></div>${actions("Save purchase")}</form>`, "PURCHASES");
+  const form = `${draft ? `<p class="info warning">Review every extracted field and select the matching product. Nothing has been saved yet.</p>` : `<p class="muted">Record the items you received. Stock updates when you save.</p>`}<form id="purchase-form" class="form-stack"><label>Supplier name <small>Optional</small><input name="supplier_name" maxlength="150" value="${esc(draft?.supplier_name || "")}"></label><div><label>Purchase items</label><div id="purchase-lines">${rows}</div><button type="button" class="text-button" data-action="add-purchase-line">+ Add another item</button></div>${actions("Save purchase")}</form>`;
+  const content = memoFile ? `<div class="memo-review"><section class="memo-preview" aria-label="Uploaded memo"><h3>Uploaded memo</h3><div class="memo-preview-image"><img id="memo-preview-image" alt="Uploaded purchase memo"></div></section><div class="memo-review-form">${form}</div></div>` : form;
+  openModal("New purchase", content, "PURCHASES");
+  if (memoFile) {
+    memoPreviewUrl = URL.createObjectURL(memoFile);
+    $("#memo-preview-image").src = memoPreviewUrl;
+    modal.classList.add("memo-review-modal");
+  }
 }
 function saleForm() {
   if (!state.products.length || !state.customers.length) { notify("Add at least one product and customer before making a sale.", true); return; }
@@ -167,7 +183,7 @@ async function submitForm(form) {
   } else if (id === "memo-form") {
     const file = $("[name=file]",form).files[0]; if (!file) throw new Error("Choose a memo image.");
     const body = new FormData(); body.append("file",file); const draft = await api("/purchases/memo-draft", {method:"POST", body});
-    if (modal.open && form.isConnected) purchaseForm(draft); return;
+    if (modal.open && form.isConnected) purchaseForm(draft, file); return;
   }
   closeModal(); await navigate(state.page);
 }
