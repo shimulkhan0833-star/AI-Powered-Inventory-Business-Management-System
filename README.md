@@ -140,6 +140,11 @@ returns 503 and the manual purchase endpoint remains available. Uploaded
 images are sent to Google; do not upload confidential documents without the
 business's permission. Gemini usage may incur charges.
 
+The server retries a Google 503 or timeout once after a short pause. Each
+attempt has a 20-second HTTP timeout, so a retry can make scanning slower and
+may consume additional quota. Other errors, including 429 quota errors, are not
+automatically retried.
+
 The default model is configurable because availability and pricing can vary.
 AI output is not validated for accuracy. See [Google's structured-output documentation](https://ai.google.dev/gemini-api/docs/structured-output)
 for the API format.

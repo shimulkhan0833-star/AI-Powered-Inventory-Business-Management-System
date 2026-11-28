@@ -4,6 +4,7 @@ import base64
 import logging
 import os
 import re
+import time
 
 import httpx
 from pydantic import ValidationError
@@ -23,6 +24,25 @@ PROMPT = (
 
 class MemoUnavailable(Exception):
     pass
+
+
+def request_gemini(url: str, key: str, payload: dict) -> httpx.Response:
+    """Retry one transient 503 or timeout; do not retry quota/auth errors."""
+    for attempt in range(2):
+        try:
+            response = httpx.post(url, headers={"x-goog-api-key": key}, json=payload, timeout=20.0)
+            response.raise_for_status()
+            return response
+        except httpx.TimeoutException:
+            if attempt == 1:
+                raise
+            logger.warning("Memo extraction: Google request timed out; retrying once")
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code != 503 or attempt == 1:
+                raise
+            logger.warning("Memo extraction: Google returned HTTP 503; retrying once")
+        time.sleep(1)
+    raise RuntimeError("Unreachable retry state")
 
 
 def extract_memo(image: bytes, content_type: str) -> MemoDraft:
@@ -48,11 +68,9 @@ def extract_memo(image: bytes, content_type: str) -> MemoDraft:
         "mime_type": content_type, "data": base64.b64encode(image).decode("ascii")}}]}],
         "generationConfig": {"responseMimeType": "application/json", "responseJsonSchema": schema}}
     try:
-        response = httpx.post(
-            f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
-            headers={"x-goog-api-key": key}, json=payload, timeout=20.0,
+        response = request_gemini(
+            f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent", key, payload
         )
-        response.raise_for_status()
         text = response.json()["candidates"][0]["content"]["parts"][0]["text"]
         draft = MemoDraft.model_validate_json(text)
         draft.note = "AI draft only. Review every field and select matching products before saving."

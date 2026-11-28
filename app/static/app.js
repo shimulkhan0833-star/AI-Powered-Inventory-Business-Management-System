@@ -160,13 +160,15 @@ async function submitForm(form) {
   } else if (id === "memo-form") {
     const file = $("[name=file]",form).files[0]; if (!file) throw new Error("Choose a memo image.");
     const body = new FormData(); body.append("file",file); const draft = await api("/purchases/memo-draft", {method:"POST", body});
-    purchaseForm(draft); return;
+    if (modal.open && form.isConnected) purchaseForm(draft); return;
   }
   closeModal(); await navigate(state.page);
 }
 document.addEventListener("submit", async event => {
   const form = event.target; event.preventDefault(); const submit = $("button[type=submit]", form); if (submit) submit.disabled = true;
-  try { await submitForm(form); } catch (error) { notify(error.message, true); } finally { if (submit) submit.disabled = false; }
+  const progress = form.id === "memo-form" ? $("#memo-progress", form) : null;
+  const label = submit?.textContent; if (progress) progress.hidden = false; if (progress && submit) submit.textContent = "Reading memo…";
+  try { await submitForm(form); } catch (error) { notify(error.message, true); } finally { if (submit) { submit.disabled = false; submit.textContent = label; } if (progress) progress.hidden = true; }
 });
 document.addEventListener("click", async event => {
   const target = event.target.closest("button"); if (!target) return;
@@ -190,7 +192,7 @@ document.addEventListener("click", async event => {
     else if (action === "add-sale-line") $("#sale-lines").insertAdjacentHTML("beforeend", saleRow());
     else if (action === "remove-line") target.closest(".line-row").remove();
     else if (action === "payment") { const invoice = state.sales.find(s => s.invoice_id === id); openModal("Record a payment", `<p class="muted">Invoice ${reference("INV", id)} · ${esc(invoice.customer_name)}</p><p class="info">Outstanding due: <strong>${money(invoice.due)}</strong></p><form id="payment-form" data-id="${id}" class="form-stack"><label>Amount received ৳<input name="amount" type="number" min="0.01" max="${esc(invoice.due)}" step="0.01" required></label>${actions("Record payment")}</form>`, "CUSTOMER DUES"); }
-    else if (action === "memo") openModal("Scan a purchase memo", `<p class="muted">Upload a clear photo of a supplier memo. You’ll review the draft before anything is saved.</p><p class="info">The photo is sent to Google for extraction. Use JPEG or PNG, up to 5 MB. If scanning fails, enter the purchase manually.</p><form id="memo-form" class="form-stack"><label>Memo photo<input name="file" type="file" accept="image/png,image/jpeg" required></label>${actions("Read memo")}</form>`, "PURCHASES");
+    else if (action === "memo") openModal("Scan a purchase memo", `<p class="muted">Upload a clear photo of a supplier memo. You’ll review the draft before anything is saved.</p><p class="info">The photo is sent to Google for extraction. Use JPEG or PNG, up to 5 MB. If scanning fails, enter the purchase manually.</p><form id="memo-form" class="form-stack"><label>Memo photo<input name="file" type="file" accept="image/png,image/jpeg" required></label><p id="memo-progress" class="info" role="status" aria-live="polite" hidden>Reading your memo. This can take a little while; please wait.</p>${actions("Read memo")}</form>`, "PURCHASES");
   } catch (error) { notify(error.message, true); }
 });
 document.addEventListener("input", event => {
