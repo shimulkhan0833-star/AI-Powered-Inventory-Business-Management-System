@@ -105,8 +105,8 @@ function renderPage() {
     html = `<div class="card"><div class="card-head"><div><h3>Sales invoices</h3><p>Review invoices and record payments.</p></div></div>${table(["Invoice","Customer","Total","Due",""],salesRows,"No sales yet. Create your first invoice.")}</div>`;
   } else if (state.page === "customers") {
     pageHeader("YOUR CUSTOMERS", "Customers & dues", "Keep your customer balances in view.", button("+ Add customer", "new-customer", true));
-    const rows = state.customers.map(c => `<tr><td><strong>${esc(c.name)}</strong></td><td>${esc(c.phone || "—")}</td><td>${money(c.due)}</td></tr>`);
-    html = `<div class="card"><div class="card-head"><div><h3>Customer list</h3><p>Use the Sales page to record a payment against an invoice.</p></div></div>${table(["Customer","Phone","Outstanding due"],rows,"No customers yet.")}</div>`;
+    const rows = state.customers.map(c => `<tr data-search="${esc(`${c.name} ${c.phone || ""}`.toLowerCase())}"><td><strong>${esc(c.name)}</strong></td><td>${esc(c.phone || "—")}</td><td>${money(c.due)}</td><td>${Number(c.due) > 0 ? `<button class="text-button" data-action="customer-payment" data-id="${c.customer_id}">Add payment</button>` : "—"}</td></tr>`);
+    html = `<div class="card"><div class="card-head"><div><h3>Customer list</h3><p>Find a customer and record a payment against an outstanding invoice.</p></div></div><div class="toolbar"><input id="customer-search" type="search" placeholder="Search by customer name or phone" aria-label="Search customers by name or phone"></div><div id="customer-table">${table(["Customer","Phone","Outstanding due",""],rows,"No customers yet.")}</div><p id="customer-no-results" class="empty" hidden>No customers match your search.</p></div>`;
   } else if (state.page === "employees") {
     pageHeader("YOUR PEOPLE", "Team", "Manage access to your business.", button("+ Add salesperson", "new-employee", true));
     const rows = state.employees.map(u => `<tr><td><strong>${esc(u.name)}</strong><small>${esc(u.email)}</small></td><td>Salesperson</td><td><span class="pill ${u.is_active ? "" : "warn"}">${u.is_active ? "Active" : "Inactive"}</span></td><td>${u.is_active ? `<button class="text-button" data-action="deactivate" data-id="${u.user_id}">Deactivate</button>` : "—"}</td></tr>`);
@@ -189,6 +189,12 @@ function showPurchaseDetails(purchase) {
   });
   openModal(`Purchase ${reference("PUR", purchase.purchase_id)}`, `<div class="purchase-details-meta"><div><small>Supplier</small><strong>${esc(purchase.supplier_name || "Not specified")}</strong></div><div><small>Date and time</small><strong>${esc(purchaseDateTime(purchase.created_at))}</strong></div><div><small>Recorded by</small><strong>User #${purchase.user_id}</strong></div></div><h3>Purchase items</h3>${table(["Product", "Quantity", "Unit cost", "Amount"], rows, "No items recorded.")}<div class="purchase-details-total"><span>Total</span><strong>${money(purchase.total)}</strong></div><p class="muted purchase-details-note">Product names reflect the current catalogue.</p><div class="modal-actions"><button type="button" class="btn" data-action="close">Close</button></div>`, "PURCHASES");
 }
+function customerPaymentForm(customer) {
+  const invoices = state.sales.filter(invoice => invoice.customer_id === customer.customer_id && Number(invoice.due) > 0);
+  if (!invoices.length) { notify("No outstanding invoices found. Refresh the customer list and try again.", true); return; }
+  const options = invoices.map(invoice => `<option value="${invoice.invoice_id}">${reference("INV", invoice.invoice_id)} · Due ${money(invoice.due)}</option>`).join("");
+  openModal("Record a payment", `<p class="muted">${esc(customer.name)} · Total outstanding ${money(customer.due)}</p><p class="info">Choose the invoice this payment is for. Each payment is applied to one invoice.</p><form id="customer-payment-form" data-customer-id="${customer.customer_id}" class="form-stack"><label>Outstanding invoice<select name="invoice_id" required><option value="">Select an invoice</option>${options}</select></label><p id="customer-payment-due" class="muted">Select an invoice to see its due amount.</p><label>Amount received ৳<input name="amount" type="number" min="0.01" step="0.01" required disabled></label>${actions("Record payment")}</form>`, "CUSTOMER DUES");
+}
 function saleForm() {
   if (!state.products.length) { notify("Add at least one product before making a sale.", true); return; }
   openModal("New sale", `<div class="sale-layout"><section class="sale-catalog"><div class="sale-section-head"><div><h3>Choose products</h3><p>Select items to add to the sale.</p></div></div><input id="sale-product-search" type="search" placeholder="Search products or SKU" aria-label="Search products"><div class="sale-product-grid">${state.products.map(saleProductCard).join("")}</div></section><form id="sale-form" class="sale-cart"><label>Customer<select name="customer_id" required>${customerOptions()}</select></label><button type="button" class="text-button sale-customer-toggle" data-action="toggle-sale-customer" aria-expanded="false" aria-controls="sale-new-customer">+ Add customer</button><div id="sale-new-customer" class="sale-new-customer" hidden><label>Customer name<input id="sale-customer-name" maxlength="150" autocomplete="name"></label><label>Phone <small>Optional</small><input id="sale-customer-phone" type="tel" maxlength="40" autocomplete="tel"></label><button type="button" class="btn small" data-action="save-sale-customer">Add and select customer</button></div><div class="sale-cart-heading"><h3>Sale items</h3><p>Adjust quantities before saving.</p></div><div id="sale-lines"></div><p id="sale-empty" class="sale-empty">Select a product to add it here.</p><div class="sale-summary"><div><span>Total</span><strong id="sale-total">${money(0)}</strong></div><div><span>Paid</span><strong id="sale-paid">${money(0)}</strong></div><div class="sale-due"><span>Due</span><strong id="sale-due">${money(0)}</strong></div></div><label>Amount paid now ৳<input name="initial_payment" type="number" min="0" max="0" step="0.01" value="0" required></label><p class="sale-note">Prices and stock are confirmed when the invoice is saved.</p>${actions("Complete sale")}</form></div>`, "SALES");
@@ -237,6 +243,11 @@ async function submitForm(form) {
   } else if (id === "payment-form") {
     const data = {amount:values.amount}; const pending = pendingKey(`payment.${form.dataset.id}`,data);
     await api(`/sales/${form.dataset.id}/payments`, {method:"POST", json:data, headers:{"Idempotency-Key":pending.key}}); pending.clear(); notify("Payment recorded.");
+  } else if (id === "customer-payment-form") {
+    const invoice = state.sales.find(s => s.invoice_id === Number(values.invoice_id) && s.customer_id === Number(form.dataset.customerId) && Number(s.due) > 0);
+    if (!invoice) throw new Error("Select an outstanding invoice.");
+    const data = {amount:values.amount}; const pending = pendingKey(`payment.${invoice.invoice_id}`, data);
+    await api(`/sales/${invoice.invoice_id}/payments`, {method:"POST", json:data, headers:{"Idempotency-Key":pending.key}}); pending.clear(); notify("Payment recorded.");
   } else if (id === "memo-form") {
     const file = $("[name=file]",form).files[0]; if (!file) throw new Error("Choose a memo image.");
     const body = new FormData(); body.append("file",file); const draft = await api("/purchases/memo-draft", {method:"POST", body});
@@ -264,6 +275,7 @@ document.addEventListener("click", async event => {
     else if (action === "history") { const p = state.products.find(p => p.product_id === id); const rows = await api(`/products/${id}/history`); openModal(`${p.name} · stock history`, `<div class="history-list">${rows.length ? rows.map(r => `<div class="history-item"><strong>${r.quantity_change > 0 ? "+" : ""}${r.quantity_change} · ${esc(r.movement_type)}</strong>${r.reason ? ` · ${esc(movementReason(r))}` : ""}<small>${esc(r.created_at)} · User #${r.user_id}</small></div>`).join("") : `<p class="muted">No stock movements yet.</p>`}</div>`, "PRODUCTS & STOCK"); }
     else if (action === "adjust") { const p = state.products.find(p => p.product_id === id); openModal("Adjust stock", `<p class="muted">${esc(p.name)} currently has ${p.stock_quantity} units.</p><p class="info warning">If your connection fails, check stock history before retrying an adjustment.</p><form id="adjust-form" data-id="${id}" class="form-stack"><label>Change in quantity <small>Use a negative number to reduce stock.</small><input name="quantity_change" type="number" step="1" required></label><label>Reason<input name="reason" maxlength="255" required></label>${actions("Save adjustment")}</form>`, "PRODUCTS & STOCK"); }
     else if (action === "new-customer") openModal("Add customer", `<form id="customer-form" class="form-stack"><label>Customer name<input name="name" maxlength="150" required></label><label>Phone <small>Optional</small><input name="phone" type="tel" maxlength="40"></label>${actions("Add customer")}</form>`, "CUSTOMERS");
+    else if (action === "customer-payment") { const customer = state.customers.find(c => c.customer_id === id); if (customer) customerPaymentForm(customer); }
     else if (action === "new-employee") openModal("Add salesperson", `<p class="muted">Set the credentials your salesperson will use to sign in.</p><form id="employee-form" class="form-stack"><label>Name<input name="name" maxlength="150" required></label><label>Email<input name="email" type="email" required></label><label>Password<input name="password" type="password" minlength="8" maxlength="128" required><small>Share it privately. Password changes are not available yet.</small></label>${actions("Add salesperson")}</form>`, "TEAM");
     else if (action === "deactivate") { if (confirm("Deactivate this salesperson’s access?")) { await api(`/employees/${id}/deactivate`, {method:"PATCH"}); notify("Salesperson deactivated."); await navigate("employees"); } }
     else if (action === "new-purchase") purchaseForm();
@@ -301,6 +313,12 @@ document.addEventListener("click", async event => {
   } catch (error) { notify(error.message, true); }
 });
 document.addEventListener("input", event => {
+  if (event.target.id === "customer-search") {
+    const query = event.target.value.toLowerCase().trim(); const rows = $$("#customer-table tbody tr");
+    rows.forEach(row => { row.hidden = !row.dataset.search.includes(query); });
+    $("#customer-no-results").hidden = !query || !rows.length || rows.some(row => !row.hidden);
+    return;
+  }
   if (event.target.id === "purchase-search") {
     const query = event.target.value.toLowerCase().trim(); const rows = $$("#purchase-table tbody tr");
     rows.forEach(row => { row.hidden = !row.dataset.search.includes(query); });
@@ -316,6 +334,14 @@ document.addEventListener("input", event => {
   if (event.target.id !== "product-search") return;
   const query = event.target.value.toLowerCase().trim();
   $$("#product-table tbody tr").forEach(row => {row.hidden = !row.textContent.toLowerCase().includes(query);});
+});
+document.addEventListener("change", event => {
+  const form = event.target.closest("#customer-payment-form");
+  if (!form || event.target.name !== "invoice_id") return;
+  const invoice = state.sales.find(s => s.invoice_id === Number(event.target.value) && s.customer_id === Number(form.dataset.customerId) && Number(s.due) > 0);
+  const amount = $("[name=amount]", form); amount.value = ""; amount.disabled = !invoice;
+  if (invoice) amount.max = invoice.due; else amount.removeAttribute("max");
+  $("#customer-payment-due", form).textContent = invoice ? `Invoice due: ${money(invoice.due)}` : "Select an invoice to see its due amount.";
 });
 document.addEventListener("keydown", event => {
   if (event.key === "Enter" && event.target.closest("#sale-new-customer")) {
