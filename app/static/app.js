@@ -149,8 +149,9 @@ function renderPage() {
     html = `<div class="card"><div class="card-head"><div><h3>Customer list</h3><p>Find a customer and record a payment against their outstanding balance.</p></div></div><div class="toolbar"><input id="customer-search" type="search" placeholder="Search by customer name or phone" aria-label="Search customers by name or phone"></div><div id="customer-table">${table(["Customer","Phone","Outstanding due",""],rows,"No customers yet.")}</div><p id="customer-no-results" class="empty" hidden>No customers match your search.</p></div>`;
   } else if (state.page === "employees") {
     pageHeader("YOUR PEOPLE", "Team", "Manage access to your business.", button("+ Add salesperson", "new-employee", true));
-    const rows = state.employees.map(u => `<tr><td><strong>${esc(u.name)}</strong><small>${esc(u.email)}</small></td><td>Salesperson</td><td><span class="pill ${u.is_active ? "" : "warn"}">${u.is_active ? "Active" : "Inactive"}</span></td><td>${u.is_active ? `<button class="text-button" data-action="deactivate" data-id="${u.user_id}">Deactivate</button>` : "—"}</td></tr>`);
-    html = `<div class="card"><div class="card-head"><div><h3>Your salespeople</h3><p>Only owners can add and deactivate team members.</p></div></div>${table(["Name","Role","Status",""],rows,"No salespeople added yet.")}</div>`;
+    const people = [{...state.user, is_active:true}, ...state.employees];
+    const rows = people.map(u => `<tr><td><strong>${esc(u.name)}</strong><small>${esc(u.email)}</small></td><td>${u.role === "owner" ? "Owner" : "Salesperson"}</td><td><span class="pill ${u.is_active ? "" : "warn"}">${u.is_active ? "Active" : "Inactive"}</span></td><td><button class="text-button" data-action="team-sales-history" data-id="${u.user_id}">View sales history</button>${u.role === "salesperson" && u.is_active ? ` &nbsp; <button class="text-button" data-action="deactivate" data-id="${u.user_id}">Deactivate</button>` : ""}</td></tr>`);
+    html = `<div class="card"><div class="card-head"><div><h3>Your team</h3><p>View sales history and manage salesperson access.</p></div></div>${table(["Name","Role","Status",""],rows,"No team members yet.")}</div>`;
   }
   $("#page-content").innerHTML = html;
 }
@@ -235,6 +236,14 @@ function customerPaymentForm(customer) {
 function historyDateTime(value) {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? String(value || "—") : date.toLocaleString(undefined, {year:"numeric", month:"short", day:"numeric", hour:"2-digit", minute:"2-digit"});
+}
+function showTeamSalesHistory(person, sales) {
+  const ownSales = sales.filter(sale => sale.user_id === person.user_id).sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)) || b.invoice_id - a.invoice_id);
+  const total = ownSales.reduce((sum, sale) => sum + dashboardCents(sale.total), 0n);
+  const due = ownSales.reduce((sum, sale) => sum + dashboardCents(sale.due), 0n);
+  const rows = ownSales.map(sale => `<tr><td><a href="/sales/${sale.invoice_id}/print" target="_blank" rel="noopener">${reference("INV", sale.invoice_id)}</a></td><td>${esc(historyDateTime(sale.created_at))}</td><td>${esc(sale.customer_name)}</td><td>${dashboardMoney(dashboardCents(sale.total))}</td><td>${dashboardMoney(dashboardCents(sale.due))}</td></tr>`);
+  openModal(`${person.name} · sales history`, `<div class="customer-history-summary"><div><small>Completed sales</small><strong>${ownSales.length}</strong></div><div><small>Total sales value</small><strong>${dashboardMoney(total)}</strong></div><div><small>Current due on these sales</small><strong>${dashboardMoney(due)}</strong></div></div>${table(["Invoice", "Date & time", "Customer", "Sale amount", "Due"], rows, "No sales recorded for this team member.")}<p class="muted customer-history-note">Due is the current unpaid balance on these invoices. Dates and times use your device’s time zone.</p><div class="modal-actions"><button type="button" class="btn" data-action="close">Close</button></div>`, "TEAM");
+  modal.classList.add("customer-history-modal");
 }
 function showCustomerHistory(history) {
   const {customer, sales} = history;
@@ -339,6 +348,11 @@ document.addEventListener("click", async event => {
     else if (action === "customer-history") showCustomerHistory(await api(`/customers/${id}/history`));
     else if (action === "new-employee") openModal("Add salesperson", `<p class="muted">Set the credentials your salesperson will use to sign in.</p><form id="employee-form" class="form-stack"><label>Name<input name="name" maxlength="150" required></label><label>Email<input name="email" type="email" required></label><label>Password<input name="password" type="password" minlength="8" maxlength="128" required><small>Share it privately. Password changes are not available yet.</small></label>${actions("Add salesperson")}</form>`, "TEAM");
     else if (action === "deactivate") { if (confirm("Deactivate this salesperson’s access?")) { await api(`/employees/${id}/deactivate`, {method:"PATCH"}); notify("Salesperson deactivated."); await navigate("employees"); } }
+    else if (action === "team-sales-history") {
+      if (state.user.role !== "owner") return;
+      const person = id === state.user.user_id ? state.user : state.employees.find(employee => employee.user_id === id);
+      if (person) showTeamSalesHistory(person, await api("/sales"));
+    }
     else if (action === "new-purchase") purchaseForm();
     else if (action === "purchase-details") showPurchaseDetails(await api(`/purchases/${id}`));
     else if (action === "new-sale") saleForm();
