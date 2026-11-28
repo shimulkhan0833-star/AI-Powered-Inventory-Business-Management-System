@@ -105,7 +105,7 @@ function renderPage() {
   $("#page-content").innerHTML = html;
 }
 
-function productOptions(selected = "") { return `<option value="">Select a product</option>` + state.products.map(p => `<option value="${p.product_id}" ${String(p.product_id) === String(selected) ? "selected" : ""}>${esc(p.name)} · ${esc(p.sku)} (${p.stock_quantity} available)</option>`).join(""); }
+function productOptions(selected = "", placeholder = "Select a product") { return `<option value="">${esc(placeholder)}</option>` + state.products.map(p => `<option value="${p.product_id}" ${String(p.product_id) === String(selected) ? "selected" : ""}>${esc(p.name)} · ${esc(p.sku)} (${p.stock_quantity} available)</option>`).join(""); }
 function customerOptions() { return `<option value="">Select a customer</option>` + state.customers.map(c => `<option value="${c.customer_id}">${esc(c.name)}</option>`).join(""); }
 function memoUnitCost(value) {
   if (value == null) return "";
@@ -114,7 +114,7 @@ function memoUnitCost(value) {
   if (!/^(?:\d+|\d{1,3}(?:,\d{3})+|\d{1,2}(?:,\d{2})+,\d{3})(?:\.\d{1,2})?$/.test(text)) return "";
   return text.replace(/,/g, "");
 }
-function purchaseRow(hint = {}) { const cost = memoUnitCost(hint.unit_price); return `<div class="line-row"><label>Product${hint.product_name ? `<small>Memo: ${esc(hint.product_name)}</small>` : ""}<select name="product_id" required>${productOptions()}</select></label><label>Quantity<input name="quantity" type="number" min="1" step="1" value="${esc(hint.quantity || "")}" required></label><label>Unit cost ৳${hint.unit_price != null && !cost ? `<small>Memo: ${esc(hint.unit_price)} — enter cost manually</small>` : ""}<input name="unit_price" type="number" min="0" step="0.01" value="${esc(cost)}" required></label><button type="button" class="icon-button" data-action="remove-line" aria-label="Remove item">×</button></div>`; }
+function purchaseRow(hint = {}) { const cost = memoUnitCost(hint.unit_price); return `<div class="line-row"><label>Product<select name="product_id" required>${productOptions("", hint.product_name || "Select a product")}</select></label><label>Quantity<input name="quantity" type="number" min="1" step="1" value="${esc(hint.quantity || "")}" required></label><label>Unit cost ৳${hint.unit_price != null && !cost ? `<small>Memo: ${esc(hint.unit_price)} — enter cost manually</small>` : ""}<input name="unit_price" type="number" min="0" step="0.01" value="${esc(cost)}" required></label><button type="button" class="icon-button" data-action="remove-line" aria-label="Remove item">×</button></div>`; }
 function saleRow() { return `<div class="line-row sale-line"><label>Product<select name="product_id" required>${productOptions()}</select></label><label>Quantity<input name="quantity" type="number" min="1" step="1" value="1" required></label><button type="button" class="icon-button" data-action="remove-line" aria-label="Remove item">×</button></div>`; }
 function productForm(product = null) {
   const p = product || {}; const edit = !!product;
