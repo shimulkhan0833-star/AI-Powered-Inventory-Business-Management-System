@@ -12,7 +12,7 @@ function movementReason(movement) {
   if (movement.movement_type === "sale") return reason.replace(/^Sale #(\d+)$/, (_, id) => `Sale ${reference("INV", id)}`);
   return reason;
 }
-const state = {user:null, page:"dashboard", products:[], customers:[], sales:[], purchases:[], employees:[]};
+const state = {user:null, page:"dashboard", products:[], customers:[], sales:[], purchases:[], employees:[], dashboardRange:{from:"", to:""}};
 const modal = $("#modal");
 let toastTimer;
 let memoPreviewUrl = null;
@@ -58,6 +58,39 @@ function pageHeader(kicker, title, description, buttons = "") {
   $("#page-heading").innerHTML = `<div class="page-title"><div><span class="eyebrow">${esc(kicker)}</span><h1>${esc(title)}</h1><p>${esc(description)}</p></div><div class="actions">${buttons}</div></div>`;
 }
 function button(label, action, primary = false, extra = "") { return `<button class="btn ${primary ? "primary" : ""}" data-action="${action}" ${extra}>${esc(label)}</button>`; }
+function localDateKey(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+function dashboardSales(sales, range) {
+  return sales.filter(sale => {
+    if (!range.from && !range.to) return true;
+    const date = localDateKey(sale.created_at);
+    return !!date && (!range.from || date >= range.from) && (!range.to || date <= range.to);
+  });
+}
+function dashboardCents(value) {
+  const parts = String(value).split(".");
+  return BigInt(parts[0]) * 100n + BigInt((parts[1] || "").padEnd(2, "0"));
+}
+function dashboardMoney(cents) {
+  const negative = cents < 0n; const absolute = negative ? -cents : cents;
+  return `৳${negative ? "-" : ""}${(absolute / 100n).toLocaleString("en-BD")}.${String(absolute % 100n).padStart(2, "0")}`;
+}
+function dashboardCosts(products, sales) {
+  const productsById = new Map(products.map(product => [product.product_id, product]));
+  const missingStock = products.filter(product => product.stock_quantity > 0 && product.purchase_cost == null).length;
+  const stockCost = products.reduce((sum, product) => sum + (product.purchase_cost == null ? 0n : dashboardCents(product.purchase_cost) * BigInt(product.stock_quantity)), 0n);
+  let estimatedCost = 0n; const missingSoldProducts = new Set();
+  for (const sale of sales) for (const item of sale.items) {
+    const product = productsById.get(item.product_id);
+    if (!product || product.purchase_cost == null) missingSoldProducts.add(item.product_id);
+    else estimatedCost += dashboardCents(product.purchase_cost) * BigInt(item.quantity);
+  }
+  const sold = sales.reduce((sum, sale) => sum + dashboardCents(sale.total), 0n);
+  return {stockCost, missingStock, estimatedProfit:sold - estimatedCost, missingSold:missingSoldProducts.size};
+}
 function showAuth(which = "login") {
   $("#auth").hidden = false; $("#workspace").hidden = true;
   $("#login-panel").hidden = which !== "login"; $("#register-panel").hidden = which !== "register";
@@ -89,11 +122,17 @@ function renderPage() {
   let html = "";
   if (state.page === "dashboard") {
     pageHeader("YOUR WORKSPACE", `Good to see you, ${state.user.name.split(" ")[0]}`, "Here’s a little clarity for your day.");
-    const due = state.customers.reduce((sum, c) => sum + Number(c.due), 0);
+    const due = state.customers.reduce((sum, c) => sum + dashboardCents(c.due), 0n);
+    const range = state.dashboardRange; const periodSales = dashboardSales(state.sales, range);
+    const sold = periodSales.reduce((sum, sale) => sum + dashboardCents(sale.total), 0n);
+    const marketValue = state.products.reduce((sum, p) => sum + dashboardCents(p.selling_price) * BigInt(p.stock_quantity), 0n);
+    const costs = owner ? dashboardCosts(state.products, periodSales) : null;
+    const periodRows = periodSales.map(s => `<tr><td><strong>${reference("INV", s.invoice_id)}</strong><small>${esc((s.created_at || "").slice(0,10))}</small></td><td>${esc(s.customer_name)}</td><td>${money(s.total)}</td><td>${money(s.due)}</td><td><a href="/sales/${s.invoice_id}/print" target="_blank" rel="noopener">View invoice</a></td></tr>`);
     html = `<div class="hero"><div><span class="eyebrow">YOUR BUSINESS, AT A GLANCE</span><h2>Ready for a good day of business?</h2><p>Keep track of what’s on your shelves and what your customers owe, all in one place.</p></div><div class="hero-art" aria-hidden="true">✳</div></div>
-      <div class="stats"><div class="stat"><small>Products</small><strong>${state.products.length}</strong><span>In your catalogue</span></div><div class="stat"><small>Outstanding dues</small><strong>${money(due)}</strong><span>Across ${state.customers.length} customers</span></div><div class="stat"><small>Sales invoices</small><strong>${state.sales.length}</strong><span>Recorded so far</span></div></div>
+      <form id="dashboard-filter-form" class="dashboard-filter"><label>From<input type="date" name="from" value="${esc(range.from)}"></label><label>To<input type="date" name="to" value="${esc(range.to)}"></label><button class="btn primary" type="submit">Apply dates</button><button class="btn" type="button" data-action="dashboard-all-time">All time</button><span>Sales dates use your device’s time zone.</span></form>
+      <div class="stats dashboard-stats">${owner ? `<div class="stat"><small>Estimated purchase value</small><strong>${costs.missingStock ? "Unavailable" : dashboardMoney(costs.stockCost)}</strong><span>${costs.missingStock ? `Missing cost for ${costs.missingStock} in-stock product(s)` : "Current stock at current purchase costs"}</span></div>` : ""}<div class="stat"><small>Product market value</small><strong>${dashboardMoney(marketValue)}</strong><span>Current stock at selling prices</span></div><div class="stat"><small>Total sold value</small><strong>${dashboardMoney(sold)}</strong><span>${range.from || range.to ? "Selected dates" : "All time"}</span></div><div class="stat"><small>Total due</small><strong>${dashboardMoney(due)}</strong><span>Current unpaid customer balance</span></div>${owner ? `<div class="stat"><small>Estimated gross profit</small><strong>${costs.missingSold ? "Unavailable" : dashboardMoney(costs.estimatedProfit)}</strong><span>${costs.missingSold ? `Missing current cost for ${costs.missingSold} sold product(s)` : "Sales less current purchase costs; excludes expenses"}</span></div>` : ""}</div>${owner ? `<p class="muted dashboard-cost-note">Cost figures are estimates using each product’s current purchase cost, not historical batch costs. Changes to costs can change past estimates.</p>` : ""}
       <div class="card"><div class="card-head"><div><h3>A good place to start</h3><p>Jump back into the things you do most.</p></div></div><div class="quick-grid"><button class="quick" data-action="new-sale"><span class="symbol">▤</span><b>Make a sale</b><small>Create an invoice for a customer.</small></button><button class="quick" data-page="products"><span class="symbol">◇</span><b>Check your stock</b><small>See what’s on your shelves.</small></button><button class="quick" data-page="customers"><span class="symbol">◉</span><b>View customer dues</b><small>Keep up with outstanding balances.</small></button></div></div>
-      <div class="card"><div class="card-head"><div><h3>Recent sales</h3><p>Your latest invoices.</p></div><button class="text-button" data-page="sales">View all</button></div>${table(["Invoice","Customer","Total","Due",""], salesRows.slice(0,5), "No sales yet. Your first invoice will appear here.")}</div>`;
+      <div class="card"><div class="card-head"><div><h3>Recent sales</h3><p>${range.from || range.to ? "Invoices in the selected dates." : "Your latest invoices."}</p></div><button class="text-button" data-page="sales">View all</button></div>${table(["Invoice","Customer","Total","Due",""], periodRows.slice(0,5), "No sales in this period.")}</div>`;
   } else if (state.page === "products") {
     pageHeader("YOUR INVENTORY", "Products & stock", "Keep your catalogue and quantities up to date.", owner ? button("+ Add product", "new-product", true) : "");
     html = `<div class="card"><div class="card-head"><div><h3>Product catalogue</h3><p>${state.products.length} products in your business</p></div></div><div class="toolbar"><input id="product-search" type="search" placeholder="Search by name or SKU" aria-label="Search products"></div><div id="product-table">${table(["Product","Selling price",...(owner?["Purchase cost"]:[]),"Available",""],productRows,"No products yet.")}</div></div>`;
@@ -234,6 +273,10 @@ function readLines(form) {
 }
 async function submitForm(form) {
   const values = formObject(form); const id = form.id;
+  if (id === "dashboard-filter-form") {
+    if (values.from && values.to && values.from > values.to) throw new Error("The start date must be on or before the end date.");
+    state.dashboardRange = {from:values.from || "", to:values.to || ""}; renderPage(); return;
+  }
   if (id === "login-form") { const user = await api("/auth/login", {method:"POST", json:values}); form.reset(); await startWorkspace(user); return; }
   if (id === "register-form") { await api("/auth/register", {method:"POST", json:values}); $("#login-form [name=email]").value = values.email; $("#login-form [name=business_name]").value = values.business_name; form.reset(); showAuth("login"); notify("Business created. Sign in to continue."); return; }
   if (id === "product-form") {
@@ -285,6 +328,7 @@ document.addEventListener("click", async event => {
   try {
     const id = Number(target.dataset.id);
     if (action === "close") closeModal();
+    else if (action === "dashboard-all-time") { state.dashboardRange = {from:"", to:""}; renderPage(); }
     else if (action === "refresh") await navigate(state.page);
     else if (action === "new-product") productForm();
     else if (action === "edit-product") productForm(state.products.find(p => p.product_id === id));

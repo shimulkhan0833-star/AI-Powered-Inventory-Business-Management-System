@@ -92,6 +92,19 @@ business, and `PATCH /employees/{employee_id}/deactivate` to disable access. Sal
 cannot use these endpoints. The owner must share credentials privately; there
 is currently no password-change or password-reset feature.
 
+## Overview figures
+
+The overview's optional date range filters sales and estimated gross profit by
+sale date in the device's time zone. The end date is inclusive. Stock purchase
+value, stock market value, and outstanding customer due are current balances.
+Sold value is the total invoiced, including unpaid amounts.
+
+Only the owner sees estimated purchase value and gross profit. Both use each
+product's current purchase cost; costs are not saved per sold unit, so changing
+a product cost can change estimates for past periods. Gross profit excludes
+other business expenses. When a required cost is missing, the affected value
+is unavailable rather than treating the cost as zero.
+
 ## Products and stock
 
 The owner can use `POST /products` to add a product. Supply a name, selling
