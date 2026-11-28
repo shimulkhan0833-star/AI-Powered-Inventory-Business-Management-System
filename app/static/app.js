@@ -21,6 +21,7 @@ function clearMemoPreview() {
   if (memoPreviewUrl) URL.revokeObjectURL(memoPreviewUrl);
   memoPreviewUrl = null;
   modal.classList.remove("memo-review-modal");
+  modal.classList.remove("sale-modal");
 }
 modal.addEventListener("close", clearMemoPreview);
 
@@ -131,7 +132,40 @@ function memoUnitCost(value) {
   return text.replace(/,/g, "");
 }
 function purchaseRow(hint = {}) { const cost = memoUnitCost(hint.unit_price); const product = matchMemoProduct(hint.product_name); return `<div class="line-row"><label>Product<select name="product_id" required>${productOptions(product?.product_id ?? "", hint.product_name || "Select a product")}</select>${hint.product_name && !product ? `<small>No unique match for ${esc(hint.product_name)}. Select a product.</small>` : ""}</label><label>Quantity<input name="quantity" type="number" min="1" step="1" value="${esc(hint.quantity || "")}" required></label><label>Unit cost ৳${hint.unit_price != null && !cost ? `<small>Memo: ${esc(hint.unit_price)} — enter cost manually</small>` : ""}<input name="unit_price" type="number" min="0" step="0.01" value="${esc(cost)}" required></label><button type="button" class="icon-button" data-action="remove-line" aria-label="Remove item">×</button></div>`; }
-function saleRow() { return `<div class="line-row sale-line"><label>Product<select name="product_id" required>${productOptions()}</select></label><label>Quantity<input name="quantity" type="number" min="1" step="1" value="1" required></label><button type="button" class="icon-button" data-action="remove-line" aria-label="Remove item">×</button></div>`; }
+function saleProductCard(p) {
+  const picture = p.has_image ? `<img src="/products/${p.product_id}/image" alt="">` : `<span class="sale-card-placeholder" aria-hidden="true">◇</span>`;
+  return `<article class="sale-product" data-search="${esc(`${p.name} ${p.sku}`.toLowerCase())}"><div class="sale-card-image">${picture}</div><strong class="sale-card-price">${money(p.selling_price)}</strong><span class="sale-card-name">${esc(p.name)}</span><small>${p.stock_quantity > 0 ? `${p.stock_quantity} available` : "Out of stock"}</small><button type="button" class="sale-add" data-action="add-sale-product" data-id="${p.product_id}" aria-label="Add ${esc(p.name)}" ${p.stock_quantity > 0 ? "" : "disabled"}>+</button></article>`;
+}
+function saleRow(p) { return `<div class="line-row sale-cart-line" data-id="${p.product_id}"><input name="product_id" type="hidden" value="${p.product_id}"><div class="sale-cart-product"><strong>${esc(p.name)}</strong><small>${money(p.selling_price)} each</small></div><label>Qty<input name="quantity" type="number" min="1" max="${p.stock_quantity}" step="1" value="1" required aria-label="Quantity for ${esc(p.name)}"></label><button type="button" class="icon-button" data-action="remove-sale-line" aria-label="Remove ${esc(p.name)}">×</button></div>`; }
+function updateSaleTotals() {
+  const form = $("#sale-form"); if (!form) return;
+  const totalCents = $$(".sale-cart-line", form).reduce((sum, row) => {
+    const p = state.products.find(item => item.product_id === Number(row.dataset.id));
+    const qty = Number($("[name=quantity]", row).value);
+    return sum + (p && Number.isSafeInteger(qty) && qty > 0 ? Math.round(Number(p.selling_price) * 100) * qty : 0);
+  }, 0);
+  const payment = $("[name=initial_payment]", form);
+  const paidCents = Math.round((Number(payment.value) || 0) * 100);
+  payment.max = (totalCents / 100).toFixed(2);
+  $("#sale-total", form).textContent = money(totalCents / 100);
+  $("#sale-paid", form).textContent = money(paidCents / 100);
+  $("#sale-due", form).textContent = money(Math.max(0, totalCents - paidCents) / 100);
+  $("#sale-empty", form).hidden = $$(".sale-cart-line", form).length > 0;
+}
+function addSaleProduct(id) {
+  const product = state.products.find(p => p.product_id === id);
+  if (!product || product.stock_quantity <= 0) return;
+  const lines = $("#sale-lines"); const existing = $$(".sale-cart-line", lines).find(row => Number(row.dataset.id) === id);
+  if (existing) {
+    const input = $("[name=quantity]", existing);
+    if (Number(input.value) >= product.stock_quantity) { notify("No more stock is available for this product.", true); return; }
+    input.value = String((Number(input.value) || 0) + 1);
+  } else {
+    if ($$(".sale-cart-line", lines).length >= 100) { notify("A sale can contain at most 100 products.", true); return; }
+    lines.insertAdjacentHTML("beforeend", saleRow(product));
+  }
+  updateSaleTotals();
+}
 function productForm(product = null) {
   const p = product || {}; const edit = !!product;
   openModal(edit ? "Edit product" : "Add a product", `<p class="muted">${edit ? "Update your product details." : "Start with the basics. You can adjust stock later."}</p><form id="product-form" data-id="${p.product_id || ""}" class="form-stack"><div class="form-grid"><label class="full">Product name<input name="name" value="${esc(p.name || "")}" maxlength="150" required></label><label class="full">Product image <small>Optional · JPEG or PNG, up to 2 MB${p.has_image ? " · Choose a file to replace the current image" : ""}</small><input name="image" type="file" accept="image/jpeg,image/png"></label><label>SKU <small>Leave blank to generate</small><input name="sku" value="${esc(p.sku || "")}" maxlength="64"></label><label>Selling price ৳<input name="selling_price" type="number" min="0" step="0.01" value="${esc(p.selling_price || "")}" required></label><label>Purchase cost ৳ <small>Only visible to owners</small><input name="purchase_cost" type="number" min="0" step="0.01" value="${esc(p.purchase_cost ?? "")}"></label>${edit ? "" : `<label>Opening stock<input name="opening_stock" type="number" min="0" step="1" value="0" required></label>`}</div>${actions(edit ? "Save changes" : "Add product")}</form>`, "PRODUCTS & STOCK");
@@ -150,7 +184,8 @@ function purchaseForm(draft = null, memoFile = null) {
 }
 function saleForm() {
   if (!state.products.length || !state.customers.length) { notify("Add at least one product and customer before making a sale.", true); return; }
-  openModal("New sale", `<p class="muted">Choose the customer and the products they’re buying.</p><form id="sale-form" class="form-stack"><label>Customer<select name="customer_id" required>${customerOptions()}</select></label><div><label>Items</label><div id="sale-lines">${saleRow()}</div><button type="button" class="text-button" data-action="add-sale-line">+ Add another item</button></div><p class="info">The server uses the current selling price and checks available stock when you save.</p><label>Amount paid now ৳<input name="initial_payment" type="number" min="0" step="0.01" value="0" required></label>${actions("Save invoice")}</form>`, "SALES");
+  openModal("New sale", `<div class="sale-layout"><section class="sale-catalog"><div class="sale-section-head"><div><h3>Choose products</h3><p>Select items to add to the sale.</p></div></div><input id="sale-product-search" type="search" placeholder="Search products or SKU" aria-label="Search products"><div class="sale-product-grid">${state.products.map(saleProductCard).join("")}</div></section><form id="sale-form" class="sale-cart"><label>Customer<select name="customer_id" required>${customerOptions()}</select></label><div class="sale-cart-heading"><h3>Sale items</h3><p>Adjust quantities before saving.</p></div><div id="sale-lines"></div><p id="sale-empty" class="sale-empty">Select a product to add it here.</p><div class="sale-summary"><div><span>Total</span><strong id="sale-total">${money(0)}</strong></div><div><span>Paid</span><strong id="sale-paid">${money(0)}</strong></div><div class="sale-due"><span>Due</span><strong id="sale-due">${money(0)}</strong></div></div><label>Amount paid now ৳<input name="initial_payment" type="number" min="0" max="0" step="0.01" value="0" required></label><p class="sale-note">Prices and stock are confirmed when the invoice is saved.</p>${actions("Save invoice")}</form></div>`, "SALES");
+  modal.classList.add("sale-modal");
 }
 function pendingKey(type, body) {
   const storageKey = `oleyn.pending.${state.user.business_id}.${state.user.user_id}.${type}`;
@@ -227,13 +262,20 @@ document.addEventListener("click", async event => {
     else if (action === "new-purchase") purchaseForm();
     else if (action === "new-sale") saleForm();
     else if (action === "add-purchase-line") $("#purchase-lines").insertAdjacentHTML("beforeend", purchaseRow());
-    else if (action === "add-sale-line") $("#sale-lines").insertAdjacentHTML("beforeend", saleRow());
+    else if (action === "add-sale-product") addSaleProduct(id);
+    else if (action === "remove-sale-line") { target.closest(".sale-cart-line").remove(); updateSaleTotals(); }
     else if (action === "remove-line") target.closest(".line-row").remove();
     else if (action === "payment") { const invoice = state.sales.find(s => s.invoice_id === id); openModal("Record a payment", `<p class="muted">Invoice ${reference("INV", id)} · ${esc(invoice.customer_name)}</p><p class="info">Outstanding due: <strong>${money(invoice.due)}</strong></p><form id="payment-form" data-id="${id}" class="form-stack"><label>Amount received ৳<input name="amount" type="number" min="0.01" max="${esc(invoice.due)}" step="0.01" required></label>${actions("Record payment")}</form>`, "CUSTOMER DUES"); }
     else if (action === "memo") openModal("Scan a purchase memo", `<p class="muted">Upload a clear photo of a supplier memo. You’ll review the draft before anything is saved.</p><p class="info">The photo is sent to Google for extraction. Use JPEG or PNG, up to 5 MB. If scanning fails, enter the purchase manually.</p><form id="memo-form" class="form-stack"><label>Memo photo<input name="file" type="file" accept="image/png,image/jpeg" required></label><p id="memo-progress" class="info" role="status" aria-live="polite" hidden>Reading your memo. This can take a little while; please wait.</p>${actions("Read memo")}</form>`, "PURCHASES");
   } catch (error) { notify(error.message, true); }
 });
 document.addEventListener("input", event => {
+  if (event.target.id === "sale-product-search") {
+    const query = event.target.value.toLowerCase().trim();
+    $$(".sale-product").forEach(card => { card.hidden = !card.dataset.search.includes(query); });
+    return;
+  }
+  if (event.target.closest("#sale-form") && (event.target.name === "quantity" || event.target.name === "initial_payment")) { updateSaleTotals(); return; }
   if (event.target.id !== "product-search") return;
   const query = event.target.value.toLowerCase().trim();
   $$("#product-table tbody tr").forEach(row => {row.hidden = !row.textContent.toLowerCase().includes(query);});
