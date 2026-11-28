@@ -132,7 +132,7 @@ and stock movements are committed together. `GET /purchases` and
 `GET /purchases/{purchase_id}` are owner-only because they expose purchase prices.
 
 `POST /purchases/memo-draft` accepts a JPEG or PNG up to 5 MB as a multipart
-`file`. It sends the image to Google's Gemini API using `GOOGLE_API_KEY` and
+`file`. It uses LangChain's Google integration to send the image to Google's Gemini API using `GOOGLE_API_KEY` and
 the optional `GEMINI_MODEL` setting. It returns an untrusted draft only: the
 owner must review all fields, match items to product IDs, and submit the
 normal purchase request to save. If the service is unavailable, the endpoint
@@ -144,6 +144,7 @@ The server retries a Google 503 or timeout once after a short pause. Each
 attempt has a 20-second HTTP timeout, so a retry can make scanning slower and
 may consume additional quota. Other errors, including 429 quota errors, are not
 automatically retried.
+LangChain still depends on Google's service, so it cannot prevent Google 503 errors or network timeouts.
 
 The default model is configurable because availability and pricing can vary.
 AI output is not validated for accuracy. See [Google's structured-output documentation](https://ai.google.dev/gemini-api/docs/structured-output)

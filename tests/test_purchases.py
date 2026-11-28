@@ -12,6 +12,7 @@ from app.core.security import hash_password
 from app.database import Base, get_db
 from app.main import app
 from app.models import Business, Product, Purchase, StockMovement, User
+from app.services.memo import ExtractedItem, ExtractedMemo
 
 
 class PurchaseTests(unittest.TestCase):
@@ -86,12 +87,12 @@ class PurchaseTests(unittest.TestCase):
         self.assertEqual(self.client.post("/purchases/memo-draft", files={"file": ("memo.png", b"\x89PNG\r\n\x1a\nimage", "image/png")}).status_code, 403)
 
     @patch.dict("os.environ", {"GOOGLE_API_KEY": "test-key"})
-    @patch("app.services.memo.httpx.post")
-    def test_memo_draft_does_not_save_and_ai_failure_has_manual_fallback(self, post):
+    @patch("app.services.memo.time.sleep")
+    @patch("app.services.memo.ChatGoogleGenerativeAI")
+    def test_memo_draft_does_not_save_and_ai_failure_has_manual_fallback(self, model, sleep):
         self.login()
-        response = MagicMock()
-        response.json.return_value = {"candidates": [{"content": {"parts": [{"text": '{"supplier_name":"Shop","items":[{"product_name":"Rice","quantity":"2","unit_price":"10"}]}'}]}}]}
-        post.return_value = response
+        invoke = model.return_value.with_structured_output.return_value.invoke
+        invoke.return_value = ExtractedMemo(supplier_name="Shop", items=[ExtractedItem(product_name="Rice", quantity="2", unit_price="10")])
         image = {"file": ("memo.png", b"\x89PNG\r\n\x1a\nimage", "image/png")}
         result = self.client.post("/purchases/memo-draft", files=image)
         self.assertEqual(result.status_code, 200)
@@ -99,7 +100,7 @@ class PurchaseTests(unittest.TestCase):
         with self.sessions() as db:
             self.assertEqual(db.scalar(select(func.count()).select_from(Purchase)), 0)
             self.assertEqual(db.get(Product, 1).stock_quantity, 0)
-        post.side_effect = httpx.TimeoutException("timeout")
+        invoke.side_effect = httpx.TimeoutException("timeout")
         result = self.client.post("/purchases/memo-draft", files=image)
         self.assertEqual(result.status_code, 503)
         self.assertIn("manually", result.json()["detail"])
