@@ -98,8 +98,8 @@ function renderPage() {
     html = `<div class="card"><div class="card-head"><div><h3>Product catalogue</h3><p>${state.products.length} products in your business</p></div></div><div class="toolbar"><input id="product-search" type="search" placeholder="Search by name or SKU" aria-label="Search products"></div><div id="product-table">${table(["Product","Selling price",...(owner?["Purchase cost"]:[]),"Available",""],productRows,"No products yet.")}</div></div>`;
   } else if (state.page === "purchases") {
     pageHeader("STOCK COMING IN", "Purchases", "Record what arrives from your suppliers.", button("Scan memo", "memo") + button("+ New purchase", "new-purchase", true));
-    const rows = state.purchases.map(p => `<tr><td><strong>${reference("PUR", p.purchase_id)}</strong><small>${esc(purchaseDateTime(p.created_at))}</small></td><td>${esc(p.supplier_name || "Not specified")}</td><td>${p.items.length} item(s)</td><td>${money(p.total)}</td></tr>`);
-    html = `<div class="card"><div class="card-head"><div><h3>Purchase history</h3><p>Every saved purchase adds to stock.</p></div></div>${table(["Purchase","Supplier","Items","Total"],rows,"No purchases yet. Add one manually or scan a memo.")}</div>`;
+    const rows = state.purchases.map(p => `<tr data-search="${esc(`${reference("PUR", p.purchase_id)} ${p.purchase_id} ${p.supplier_name || ""}`.toLowerCase())}"><td><strong>${reference("PUR", p.purchase_id)}</strong><small>${esc(purchaseDateTime(p.created_at))}</small></td><td>${esc(p.supplier_name || "Not specified")}</td><td>${p.items.length} item(s)</td><td>${money(p.total)}</td><td><button class="text-button" data-action="purchase-details" data-id="${p.purchase_id}">View details</button></td></tr>`);
+    html = `<div class="card"><div class="card-head"><div><h3>Purchase history</h3><p>Every saved purchase adds to stock.</p></div></div><div class="toolbar"><input id="purchase-search" type="search" placeholder="Search by supplier or purchase ID" aria-label="Search purchases by supplier or purchase ID"></div><div id="purchase-table">${table(["Purchase","Supplier","Items","Total",""],rows,"No purchases yet. Add one manually or scan a memo.")}</div><p id="purchase-no-results" class="empty" hidden>No purchases match your search.</p></div>`;
   } else if (state.page === "sales") {
     pageHeader("YOUR TRANSACTIONS", "Sales", "Create invoices and keep track of payments.", button("+ New sale", "new-sale", true));
     html = `<div class="card"><div class="card-head"><div><h3>Sales invoices</h3><p>Review invoices and record payments.</p></div></div>${table(["Invoice","Customer","Total","Due",""],salesRows,"No sales yet. Create your first invoice.")}</div>`;
@@ -182,6 +182,13 @@ function purchaseForm(draft = null, memoFile = null) {
     modal.classList.add("memo-review-modal");
   }
 }
+function showPurchaseDetails(purchase) {
+  const rows = purchase.items.map(item => {
+    const product = state.products.find(p => p.product_id === item.product_id);
+    return `<tr><td>${esc(product?.name || `Product #${item.product_id}`)}</td><td>${item.quantity}</td><td>${money(item.unit_price)}</td><td>${money(Number(item.unit_price) * item.quantity)}</td></tr>`;
+  });
+  openModal(`Purchase ${reference("PUR", purchase.purchase_id)}`, `<div class="purchase-details-meta"><div><small>Supplier</small><strong>${esc(purchase.supplier_name || "Not specified")}</strong></div><div><small>Date and time</small><strong>${esc(purchaseDateTime(purchase.created_at))}</strong></div><div><small>Recorded by</small><strong>User #${purchase.user_id}</strong></div></div><h3>Purchase items</h3>${table(["Product", "Quantity", "Unit cost", "Amount"], rows, "No items recorded.")}<div class="purchase-details-total"><span>Total</span><strong>${money(purchase.total)}</strong></div><p class="muted purchase-details-note">Product names reflect the current catalogue.</p><div class="modal-actions"><button type="button" class="btn" data-action="close">Close</button></div>`, "PURCHASES");
+}
 function saleForm() {
   if (!state.products.length) { notify("Add at least one product before making a sale.", true); return; }
   openModal("New sale", `<div class="sale-layout"><section class="sale-catalog"><div class="sale-section-head"><div><h3>Choose products</h3><p>Select items to add to the sale.</p></div></div><input id="sale-product-search" type="search" placeholder="Search products or SKU" aria-label="Search products"><div class="sale-product-grid">${state.products.map(saleProductCard).join("")}</div></section><form id="sale-form" class="sale-cart"><label>Customer<select name="customer_id" required>${customerOptions()}</select></label><button type="button" class="text-button sale-customer-toggle" data-action="toggle-sale-customer" aria-expanded="false" aria-controls="sale-new-customer">+ Add customer</button><div id="sale-new-customer" class="sale-new-customer" hidden><label>Customer name<input id="sale-customer-name" maxlength="150" autocomplete="name"></label><label>Phone <small>Optional</small><input id="sale-customer-phone" type="tel" maxlength="40" autocomplete="tel"></label><button type="button" class="btn small" data-action="save-sale-customer">Add and select customer</button></div><div class="sale-cart-heading"><h3>Sale items</h3><p>Adjust quantities before saving.</p></div><div id="sale-lines"></div><p id="sale-empty" class="sale-empty">Select a product to add it here.</p><div class="sale-summary"><div><span>Total</span><strong id="sale-total">${money(0)}</strong></div><div><span>Paid</span><strong id="sale-paid">${money(0)}</strong></div><div class="sale-due"><span>Due</span><strong id="sale-due">${money(0)}</strong></div></div><label>Amount paid now ৳<input name="initial_payment" type="number" min="0" max="0" step="0.01" value="0" required></label><p class="sale-note">Prices and stock are confirmed when the invoice is saved.</p>${actions("Complete sale")}</form></div>`, "SALES");
@@ -260,6 +267,7 @@ document.addEventListener("click", async event => {
     else if (action === "new-employee") openModal("Add salesperson", `<p class="muted">Set the credentials your salesperson will use to sign in.</p><form id="employee-form" class="form-stack"><label>Name<input name="name" maxlength="150" required></label><label>Email<input name="email" type="email" required></label><label>Password<input name="password" type="password" minlength="8" maxlength="128" required><small>Share it privately. Password changes are not available yet.</small></label>${actions("Add salesperson")}</form>`, "TEAM");
     else if (action === "deactivate") { if (confirm("Deactivate this salesperson’s access?")) { await api(`/employees/${id}/deactivate`, {method:"PATCH"}); notify("Salesperson deactivated."); await navigate("employees"); } }
     else if (action === "new-purchase") purchaseForm();
+    else if (action === "purchase-details") showPurchaseDetails(await api(`/purchases/${id}`));
     else if (action === "new-sale") saleForm();
     else if (action === "toggle-sale-customer") {
       const panel = $("#sale-new-customer"); panel.hidden = !panel.hidden;
@@ -293,6 +301,12 @@ document.addEventListener("click", async event => {
   } catch (error) { notify(error.message, true); }
 });
 document.addEventListener("input", event => {
+  if (event.target.id === "purchase-search") {
+    const query = event.target.value.toLowerCase().trim(); const rows = $$("#purchase-table tbody tr");
+    rows.forEach(row => { row.hidden = !row.dataset.search.includes(query); });
+    $("#purchase-no-results").hidden = !query || !rows.length || rows.some(row => !row.hidden);
+    return;
+  }
   if (event.target.id === "sale-product-search") {
     const query = event.target.value.toLowerCase().trim();
     $$(".sale-product").forEach(card => { card.hidden = !card.dataset.search.includes(query); });
