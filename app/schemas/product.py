@@ -55,6 +55,7 @@ class PublicProduct(BaseModel):
     sku: str
     selling_price: Decimal
     stock_quantity: int
+    has_image: bool = False
 
 
 class OwnerProduct(PublicProduct):

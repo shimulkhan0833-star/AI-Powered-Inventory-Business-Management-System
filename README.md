@@ -98,6 +98,13 @@ The owner can use `POST /products` to add a product. Supply a name, selling
 price, optional purchase cost and SKU, and optional whole-number opening stock.
 When no SKU is provided, the server generates one. SKUs are unique per business.
 
+Owners can optionally add or replace a product image in the product form. Images
+must be JPEG or PNG and no larger than 2 MB. They are stored in the database;
+owners and salespeople can view images for products in their own business. To use
+this feature after updating, install the requirements and run `alembic upgrade head`.
+The API accepts the image as multipart `file` at `PUT /products/{product_id}/image`
+and serves it to authenticated users at `GET /products/{product_id}/image`.
+
 Both roles can list products with `GET /products`, view one with
 `GET /products/{product_id}`, read its current stock at `GET /products/{product_id}/stock`, and
 view stock history at `GET /products/{product_id}/history`. Salesperson responses do

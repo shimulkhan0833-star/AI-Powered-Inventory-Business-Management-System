@@ -82,7 +82,7 @@ async function navigate(page) {
 }
 function renderPage() {
   const owner = state.user.role === "owner";
-  const productRows = state.products.map(p => `<tr><td><strong>${esc(p.name)}</strong><small>${esc(p.sku)}</small></td><td>${money(p.selling_price)}</td>${owner ? `<td>${p.purchase_cost == null ? "—" : money(p.purchase_cost)}</td>` : ""}<td><span class="pill ${p.stock_quantity <= 5 ? "warn" : ""}">${p.stock_quantity} in stock</span></td><td><button class="text-button" data-action="history" data-id="${p.product_id}">History</button>${owner ? ` &nbsp; <button class="text-button" data-action="edit-product" data-id="${p.product_id}">Edit</button> &nbsp; <button class="text-button" data-action="adjust" data-id="${p.product_id}">Adjust</button>` : ""}</td></tr>`);
+  const productRows = state.products.map(p => `<tr><td><div class="product-cell">${p.has_image ? `<img class="product-image" src="/products/${p.product_id}/image" alt="">` : `<span class="product-image product-image-placeholder" aria-hidden="true">◇</span>`}<span><strong>${esc(p.name)}</strong><small>${esc(p.sku)}</small></span></div></td><td>${money(p.selling_price)}</td>${owner ? `<td>${p.purchase_cost == null ? "—" : money(p.purchase_cost)}</td>` : ""}<td><span class="pill ${p.stock_quantity <= 5 ? "warn" : ""}">${p.stock_quantity} in stock</span></td><td><button class="text-button" data-action="history" data-id="${p.product_id}">History</button>${owner ? ` &nbsp; <button class="text-button" data-action="edit-product" data-id="${p.product_id}">Edit</button> &nbsp; <button class="text-button" data-action="adjust" data-id="${p.product_id}">Adjust</button>` : ""}</td></tr>`);
   const salesRows = state.sales.map(s => `<tr><td><strong>${reference("INV", s.invoice_id)}</strong><small>${esc((s.created_at || "").slice(0,10))}</small></td><td>${esc(s.customer_name)}</td><td>${money(s.total)}</td><td>${money(s.due)}</td><td><a href="/sales/${s.invoice_id}/print" target="_blank" rel="noopener">View invoice</a>${Number(s.due) > 0 ? ` &nbsp; <button class="text-button" data-action="payment" data-id="${s.invoice_id}">Add payment</button>` : ""}</td></tr>`);
   let html = "";
   if (state.page === "dashboard") {
@@ -134,7 +134,7 @@ function purchaseRow(hint = {}) { const cost = memoUnitCost(hint.unit_price); co
 function saleRow() { return `<div class="line-row sale-line"><label>Product<select name="product_id" required>${productOptions()}</select></label><label>Quantity<input name="quantity" type="number" min="1" step="1" value="1" required></label><button type="button" class="icon-button" data-action="remove-line" aria-label="Remove item">×</button></div>`; }
 function productForm(product = null) {
   const p = product || {}; const edit = !!product;
-  openModal(edit ? "Edit product" : "Add a product", `<p class="muted">${edit ? "Update your product details." : "Start with the basics. You can adjust stock later."}</p><form id="product-form" data-id="${p.product_id || ""}" class="form-stack"><div class="form-grid"><label class="full">Product name<input name="name" value="${esc(p.name || "")}" maxlength="150" required></label><label>SKU <small>Leave blank to generate</small><input name="sku" value="${esc(p.sku || "")}" maxlength="64"></label><label>Selling price ৳<input name="selling_price" type="number" min="0" step="0.01" value="${esc(p.selling_price || "")}" required></label><label>Purchase cost ৳ <small>Only visible to owners</small><input name="purchase_cost" type="number" min="0" step="0.01" value="${esc(p.purchase_cost ?? "")}"></label>${edit ? "" : `<label>Opening stock<input name="opening_stock" type="number" min="0" step="1" value="0" required></label>`}</div>${actions(edit ? "Save changes" : "Add product")}</form>`, "PRODUCTS & STOCK");
+  openModal(edit ? "Edit product" : "Add a product", `<p class="muted">${edit ? "Update your product details." : "Start with the basics. You can adjust stock later."}</p><form id="product-form" data-id="${p.product_id || ""}" class="form-stack"><div class="form-grid"><label class="full">Product name<input name="name" value="${esc(p.name || "")}" maxlength="150" required></label><label class="full">Product image <small>Optional · JPEG or PNG, up to 2 MB${p.has_image ? " · Choose a file to replace the current image" : ""}</small><input name="image" type="file" accept="image/jpeg,image/png"></label><label>SKU <small>Leave blank to generate</small><input name="sku" value="${esc(p.sku || "")}" maxlength="64"></label><label>Selling price ৳<input name="selling_price" type="number" min="0" step="0.01" value="${esc(p.selling_price || "")}" required></label><label>Purchase cost ৳ <small>Only visible to owners</small><input name="purchase_cost" type="number" min="0" step="0.01" value="${esc(p.purchase_cost ?? "")}"></label>${edit ? "" : `<label>Opening stock<input name="opening_stock" type="number" min="0" step="1" value="0" required></label>`}</div>${actions(edit ? "Save changes" : "Add product")}</form>`, "PRODUCTS & STOCK");
 }
 function purchaseForm(draft = null, memoFile = null) {
   if (!state.products.length) { notify("Add a product before recording a purchase.", true); return; }
@@ -172,9 +172,17 @@ async function submitForm(form) {
   if (id === "login-form") { const user = await api("/auth/login", {method:"POST", json:values}); form.reset(); await startWorkspace(user); return; }
   if (id === "register-form") { await api("/auth/register", {method:"POST", json:values}); $("#login-form [name=email]").value = values.email; $("#login-form [name=business_name]").value = values.business_name; form.reset(); showAuth("login"); notify("Business created. Sign in to continue."); return; }
   if (id === "product-form") {
+    const image = $("[name=image]", form).files[0];
+    if (image && (!['image/jpeg', 'image/png'].includes(image.type) || image.size > 2 * 1024 * 1024)) throw new Error("Choose a JPEG or PNG image up to 2 MB.");
     const data = {name:values.name, selling_price:values.selling_price, purchase_cost:values.purchase_cost || null};
     if (values.sku) data.sku = values.sku; if (!form.dataset.id) data.opening_stock = Number(values.opening_stock);
-    await api(form.dataset.id ? `/products/${form.dataset.id}` : "/products", {method:form.dataset.id ? "PATCH" : "POST", json:data}); notify("Product saved.");
+    const product = await api(form.dataset.id ? `/products/${form.dataset.id}` : "/products", {method:form.dataset.id ? "PATCH" : "POST", json:data});
+    if (image) {
+      const body = new FormData(); body.append("file", image);
+      try { await api(`/products/${product.product_id}/image`, {method:"PUT", body}); }
+      catch (error) { closeModal(); await navigate(state.page); notify(`Product saved, but image upload failed: ${error.message} Edit the product to try again.`, true); return; }
+    }
+    notify("Product saved.");
   } else if (id === "adjust-form") { await api(`/products/${form.dataset.id}/adjustments`, {method:"POST", json:{quantity_change:Number(values.quantity_change), reason:values.reason}}); notify("Stock adjusted.");
   } else if (id === "customer-form") { await api("/customers", {method:"POST", json:{name:values.name, phone:values.phone || null}}); notify("Customer added.");
   } else if (id === "employee-form") { await api("/employees", {method:"POST", json:values}); notify("Salesperson added.");
