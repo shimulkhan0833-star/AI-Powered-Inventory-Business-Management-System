@@ -105,6 +105,11 @@ a product cost can change estimates for past periods. Gross profit excludes
 other business expenses. When a required cost is missing, the affected value
 is unavailable rather than treating the cost as zero.
 
+Estimated current profit is estimated gross profit minus the current total
+customer due. The date filter applies to gross profit, but total due still
+includes all unpaid invoices, including invoices outside the selected dates.
+This indicator can be negative and is not cash profit for the selected period.
+
 ## Products and stock
 
 The owner can use `POST /products` to add a product. Supply a name, selling
